@@ -118,12 +118,10 @@ static void versal_virt_modify_dtb(const struct arm_boot_info *binfo,
     versal_fdt_add_memory_nodes(&s->soc, binfo->ram_size);
 }
 
-static void *versal_virt_get_dtb(const struct arm_boot_info *binfo,
-                                  int *fdt_size)
+static void *versal_virt_get_dtb(const struct arm_boot_info *binfo)
 {
     const VersalVirt *board = container_of(binfo, VersalVirt, binfo);
 
-    *fdt_size = board->fdt_size;
     return board->fdt;
 }
 
