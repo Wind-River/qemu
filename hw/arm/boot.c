@@ -662,6 +662,17 @@ int arm_load_dtb(hwaddr addr, const struct arm_boot_info *binfo,
         binfo->modify_dtb(binfo, fdt);
     }
 
+    /*
+     * By default QEMU generates a 1 MiB FDT.
+     * Let's pack it to save some room.
+     */
+    if (binfo->get_dtb) {
+        rc = fdt_pack(fdt);
+        /* Should only fail if we've built a corrupted tree */
+        g_assert(rc == 0);
+        size = fdt_totalsize(fdt);
+    }
+
     /* Put the DTB into the memory map as a ROM image: this will ensure
      * the DTB is copied again upon reset, even if addr points into RAM.
      */
