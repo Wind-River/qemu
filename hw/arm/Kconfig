@@ -712,3 +712,12 @@ config ARMSSE
     select UNIMP
     select SSE_COUNTER
     select SSE_TIMER
+
+config NXP_S32G
+    bool
+    default y
+    depends on TCG && AARCH64
+    select ARM_GIC
+    select PL011
+    select VIRTIO_MMIO
+    select UNIMP
