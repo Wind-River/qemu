@@ -92,9 +92,17 @@ static void s32g_create_cpus(NxpS32gState *s)
                                      &error_abort);
         }
 
+        if (!s->secure) {
+            object_property_set_bool(obj, "has_el3", false, NULL);
+        }
+
+        if (!s->virt && object_property_find(obj, "has_el2")) {
+            object_property_set_bool(obj, "has_el2", false, NULL);
+        }
+
         object_property_set_int(obj, "core-count", ARRAY_SIZE(s->ap_cpu),
                                 &error_abort);
-        object_property_set_link(obj, "memory", OBJECT(&s->mr),
+        object_property_set_link(obj, "memory", OBJECT(s->mr),
                                  &error_abort);
         qdev_realize(DEVICE(obj), NULL, &error_fatal);
     }
@@ -330,6 +338,7 @@ static void nxp_s32g_init(MachineState *machine)
     uint64_t ram_size = machine->ram_size;
 
     s->psci_conduit = QEMU_PSCI_CONDUIT_HVC;
+    s->mr = get_system_memory();
 
     fdt_create(s);
     
@@ -366,9 +375,6 @@ static void nxp_s32g_machine_instance_init(Object *obj)
     /* default to secure mode disabled and virtualization (el2) disabled */
     s->secure = false;
     s->virt = false;
-
-    memory_region_init(s->mr, obj, "mr-s32g", UINT64_MAX);
-    s->mr = get_system_memory();
 }
 
 static void nxp_s32g_machine_class_init(ObjectClass *oc, void *data)
@@ -381,7 +387,7 @@ static void nxp_s32g_machine_class_init(ObjectClass *oc, void *data)
     mc->max_cpus = S32G_MAX_ACPUS;
     mc->default_cpus = S32G_MAX_ACPUS;
     mc->no_cdrom = true;
-    mc->default_ram_id = "ddr-ram";
+    mc->default_ram_id = "ddr";
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-a53");
 
     object_class_property_add_bool(oc, "secure", s32g_get_secure,
