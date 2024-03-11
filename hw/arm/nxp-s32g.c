@@ -35,12 +35,11 @@
 /* Number of external interrupt lines to configure the GIC with */
 #define NUM_IRQS 256
 
-static void *s32g_get_dtb(const struct arm_boot_info *binfo, int *fdt_size)
+static void *s32g_get_dtb(const struct arm_boot_info *binfo)
 {
     const NxpS32gState *s = container_of(binfo, NxpS32gState, binfo);
     MachineState *ms = MACHINE(s);
 
-    *fdt_size = s->fdt_size;
     return ms->fdt;
 }
 
@@ -311,7 +310,7 @@ static void fdt_create(NxpS32gState *s)
 {
     MachineState *ms = MACHINE(s);
     MachineClass *mc = MACHINE_GET_CLASS(s);
-    void *fdt = create_device_tree(&s->fdt_size);
+    void *fdt;
 
     fdt = create_device_tree(&s->fdt_size);
     if (!fdt) {
@@ -348,7 +347,10 @@ static void nxp_s32g_init(MachineState *machine)
     fdt_add_clk_nodes(s);
 
     /* add physical memory region to bus */
-    memory_region_add_subregion(s->mr, 0x0, // Where is physmem mapped on s32g? is it contiguous?
+    /* todo: physmem starts at 0x8000_0000 but has a jump
+     * after the first 2GB to 0x8_0000_0000 */
+#define S32G_PHYSMEM_BASE 0x80000000
+    memory_region_add_subregion(s->mr, S32G_PHYSMEM_BASE,
                                 machine->ram);
 
     s32g_create_gic(s, irqmap);
@@ -361,7 +363,7 @@ static void nxp_s32g_init(MachineState *machine)
 
     s->binfo.ram_size = ram_size;
     s->binfo.board_id = -1;
-    s->binfo.loader_start = 0x0;
+    s->binfo.loader_start = S32G_PHYSMEM_BASE;
     s->binfo.get_dtb = s32g_get_dtb;
     s->binfo.psci_conduit = s->psci_conduit;
 
