@@ -56,6 +56,10 @@ struct NxpS32gState {
     bool virt; // disabled
 };
 
+/* Number of external interrupt lines to configure the GIC with */
+#define S32G_NUM_IRQ 256
+
+/* PPI interrupts */
 #define S32G_GIC_MAINT_IRQ        9
 #define S32G_TIMER_NS_EL2_IRQ     10
 #define S32G_TIMER_VIRT_IRQ       11
@@ -63,14 +67,18 @@ struct NxpS32gState {
 #define S32G_TIMER_S_EL1_IRQ      13
 #define S32G_TIMER_NS_EL1_IRQ     14
 
+/* Memory Map Constants */
+#define S32G_PHYSMEM_BASE         0x80000000
+
 #define MM_GIC_DIST               0x50800000
 #define MM_GIC_DIST_SIZE          0x10000
-#define MM_GIC_REDIST             0x50900000 // Need to double check this value
-#define MM_GIC_REDIST_SIZE        0x200000 // Need to double check this value
-                                      
-#define S32G_NUM_UART             2
+#define MM_GIC_REDIST             0x50880000
+#define MM_GIC_REDIST_SIZE        0x80000
 #define MM_UART0                  0x401c8000
 #define MM_UART1                  0x401cc000
+
+/* UART */
+#define S32G_NUM_UART             2
 #define S32G_UART0_IRQ_0          82
 #define S32G_UART1_IRQ_0          83
 

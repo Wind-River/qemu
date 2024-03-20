@@ -32,9 +32,6 @@
 #include "exec/address-spaces.h"
 
 
-/* Number of external interrupt lines to configure the GIC with */
-#define NUM_IRQS 256
-
 static void *s32g_get_dtb(const struct arm_boot_info *binfo)
 {
     const NxpS32gState *s = container_of(binfo, NxpS32gState, binfo);
@@ -127,7 +124,7 @@ static void s32g_create_gic(NxpS32gState *s, qemu_irq *irqmap)
     gicdev = DEVICE(&s->gic);
     qdev_prop_set_uint32(gicdev, "revision", 3);
     qdev_prop_set_uint32(gicdev, "num-cpu", nr_cpus);
-    qdev_prop_set_uint32(gicdev, "num-irq", NUM_IRQS + 32); // 32 internal interrupts
+    qdev_prop_set_uint32(gicdev, "num-irq", S32G_NUM_IRQ + GIC_INTERNAL);
 
     redist_region_count = qlist_new();
     qlist_append_int(redist_region_count, nr_cpus);
@@ -146,17 +143,17 @@ static void s32g_create_gic(NxpS32gState *s, qemu_irq *irqmap)
 
     for (i = 0; i < nr_cpus; i++) {
         DeviceState *cpudev = DEVICE(&s->ap_cpu[i]);
-        int ppibase = NUM_IRQS + i * GIC_INTERNAL + GIC_NR_SGIS;
+        int ppibase = S32G_NUM_IRQ + i * GIC_INTERNAL + GIC_NR_SGIS;
         qemu_irq maint_irq;
         int ti;
         /* Mapping from the output timer irq lines from the CPU to the
          * GIC PPI inputs.
          */
         const int timer_irq[] = {
+            [GTIMER_SEC]  = S32G_TIMER_S_EL1_IRQ,
             [GTIMER_PHYS] = S32G_TIMER_NS_EL1_IRQ,
             [GTIMER_VIRT] = S32G_TIMER_VIRT_IRQ,
             [GTIMER_HYP]  = S32G_TIMER_NS_EL2_IRQ,
-            [GTIMER_SEC]  = S32G_TIMER_S_EL1_IRQ,
         };
 
         for (ti = 0; ti < ARRAY_SIZE(timer_irq); ti++) {
@@ -177,7 +174,7 @@ static void s32g_create_gic(NxpS32gState *s, qemu_irq *irqmap)
                            qdev_get_gpio_in(cpudev, ARM_CPU_VFIQ));
     }
 
-    for (i = 0; i < NUM_IRQS; i++) {
+    for (i = 0; i < S32G_NUM_IRQ; i++) {
         irqmap[i] = qdev_get_gpio_in(gicdev, i);
     }
 }
@@ -266,6 +263,21 @@ static void fdt_add_uart_nodes(NxpS32gState *s)
     }
 }
 
+static void fdt_add_timer_nodes(NxpS32gState *s)
+{
+    MachineState *ms = MACHINE(s);
+    const char compat[] = "arm,armv8-timer";
+    uint32_t irqFlags = GIC_FDT_IRQ_FLAGS_LEVEL_HI;
+
+    qemu_fdt_add_subnode(ms->fdt, "/timer");
+    qemu_fdt_setprop(ms->fdt, "/timer", "compatible", compat, sizeof(compat));
+    qemu_fdt_setprop_cells(ms->fdt, "/timer", "interrupts",
+        GIC_FDT_IRQ_TYPE_PPI, S32G_TIMER_S_EL1_IRQ, irqFlags,
+        GIC_FDT_IRQ_TYPE_PPI, S32G_TIMER_NS_EL1_IRQ, irqFlags,
+        GIC_FDT_IRQ_TYPE_PPI, S32G_TIMER_VIRT_IRQ, irqFlags,
+        GIC_FDT_IRQ_TYPE_PPI, S32G_TIMER_NS_EL2_IRQ, irqFlags);
+}
+
 static void fdt_add_gic_nodes(NxpS32gState *s)
 {
     MachineState *ms = MACHINE(s);
@@ -274,6 +286,9 @@ static void fdt_add_gic_nodes(NxpS32gState *s)
     nodename = g_strdup_printf("/gic@%x", MM_GIC_DIST);
 
     s->gic_phandle = qemu_fdt_alloc_phandle(ms->fdt);
+
+    // set top-level interrupt-parent to gic phandle
+    qemu_fdt_setprop_cell(ms->fdt, "/", "interrupt-parent", s->gic_phandle);
 
     qemu_fdt_add_subnode(ms->fdt, nodename);
     qemu_fdt_setprop_cells(ms->fdt, nodename, "interrupts",
@@ -320,10 +335,10 @@ static void fdt_create(NxpS32gState *s)
 
     ms->fdt = fdt;
 
-    qemu_fdt_setprop_string(fdt, "/", "compatible", "nxp,s32g3");
-    qemu_fdt_setprop_cell(fdt, "/", "#address-cells", 0x2);
     qemu_fdt_setprop_cell(fdt, "/", "#size-cells", 0x2);
+    qemu_fdt_setprop_cell(fdt, "/", "#address-cells", 0x2);
     qemu_fdt_setprop_string(fdt, "/", "model", mc->desc);
+    qemu_fdt_setprop_string(fdt, "/", "compatible", "nxp,s32g3");
 
     qemu_fdt_add_subnode(fdt, "/chosen");
 }
@@ -332,11 +347,11 @@ static void fdt_create(NxpS32gState *s)
 static void nxp_s32g_init(MachineState *machine)
 {
     NxpS32gState *s = NXP_S32G_MACHINE(machine);
-    qemu_irq irqmap[NUM_IRQS];
+    qemu_irq irqmap[S32G_NUM_IRQ];
 
     uint64_t ram_size = machine->ram_size;
 
-    s->psci_conduit = QEMU_PSCI_CONDUIT_HVC;
+    s->psci_conduit = QEMU_PSCI_CONDUIT_SMC;
     s->mr = get_system_memory();
 
     fdt_create(s);
@@ -345,11 +360,11 @@ static void nxp_s32g_init(MachineState *machine)
 
     fdt_add_cpu_nodes(s);
     fdt_add_clk_nodes(s);
+    fdt_add_timer_nodes(s);
 
     /* add physical memory region to bus */
     /* todo: physmem starts at 0x8000_0000 but has a jump
      * after the first 2GB to 0x8_0000_0000 */
-#define S32G_PHYSMEM_BASE 0x80000000
     memory_region_add_subregion(s->mr, S32G_PHYSMEM_BASE,
                                 machine->ram);
 
