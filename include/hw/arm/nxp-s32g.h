@@ -72,8 +72,8 @@ struct NxpS32gState {
 
 #define MM_GIC_DIST               0x50800000
 #define MM_GIC_DIST_SIZE          0x10000
-#define MM_GIC_REDIST             0x50880000
-#define MM_GIC_REDIST_SIZE        0x80000
+#define MM_GIC_REDIST             0x50900000
+#define MM_GIC_REDIST_SIZE        0x200000
 #define MM_UART0                  0x401c8000
 #define MM_UART1                  0x401cc000
 
