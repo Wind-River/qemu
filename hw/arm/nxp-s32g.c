@@ -114,6 +114,7 @@ static void s32g_create_gic(NxpS32gState *s, qemu_irq *irqmap)
     };
     SysBusDevice *gicbusdev;
     DeviceState *gicdev;
+    uint32_t redist0_cap, redist0_cnt;
     QList *redist_region_count;
     int nr_cpus = ARRAY_SIZE(s->ap_cpu);
     int i;
@@ -124,10 +125,18 @@ static void s32g_create_gic(NxpS32gState *s, qemu_irq *irqmap)
     gicdev = DEVICE(&s->gic);
     qdev_prop_set_uint32(gicdev, "revision", 3);
     qdev_prop_set_uint32(gicdev, "num-cpu", nr_cpus);
+    // Always GIC_INTERNAL (32) internal interrupts
     qdev_prop_set_uint32(gicdev, "num-irq", S32G_NUM_IRQ + GIC_INTERNAL);
 
+    /* 
+     * GICv3 has two 64KB frames per CPU
+     * Divide the gic redist size by 0x20000 to see how many
+     * redist regions we should advertise.
+     */
+    redist0_cap = MM_GIC_REDIST_SIZE / GICV3_REDIST_SIZE;
+    redist0_cnt = MIN(nr_cpus, redist0_cap);
     redist_region_count = qlist_new();
-    qlist_append_int(redist_region_count, nr_cpus);
+    qlist_append_int(redist_region_count, redist0_cnt);
     qdev_prop_set_array(gicdev, "redist-region-count", redist_region_count);
 
     qdev_prop_set_bit(gicdev, "has-security-extensions", true);
