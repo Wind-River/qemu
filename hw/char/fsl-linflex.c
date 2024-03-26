@@ -126,7 +126,7 @@ static void fsl_linflex_write(void *opaque, hwaddr offset,
     }
 }
 
-static uint64_t fsl_linflex_read(void *opaque, hwaddr offset, 
+static uint64_t fsl_linflex_read(void *opaque, hwaddr offset,
                                  unsigned size)
 {
     FslLinflexState *s = opaque;
@@ -169,6 +169,7 @@ static uint64_t fsl_linflex_read(void *opaque, hwaddr offset,
             break;
         default:
             // todo: maybe log invalid reg read
+            r = 0;
             break;
     }
     return r;
@@ -193,7 +194,7 @@ static void fsl_linflex_rx(void *opaque, const uint8_t *buf, int size)
 static int fsl_linflex_can_rx(void *opaque)
 {
     FslLinflexState *s = opaque;
-    
+
     // check status register, if can receive then return 1 else 0
     if ((s->regs[LINFLEX_UARTSR] & UARTSR_DRFRFE) ||
         (s->regs[LINFLEX_UARTSR] & UARTSR_RMB) ) {
