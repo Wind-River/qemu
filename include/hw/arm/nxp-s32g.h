@@ -24,6 +24,7 @@
 #include "hw/arm/bsa.h"
 #include "hw/intc/arm_gicv3.h"
 #include "hw/char/pl011.h"
+#include "hw/char/fsl-linflex.h"
 #include "qom/object.h"
 
 
