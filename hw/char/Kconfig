@@ -74,3 +74,7 @@ config GOLDFISH_TTY
 
 config SHAKTI_UART
     bool
+
+config LINFLEX_UART
+    bool
+    default y
