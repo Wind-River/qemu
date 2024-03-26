@@ -200,7 +200,7 @@ static void s32g_create_uart(NxpS32gState *s, qemu_irq *irqmap)
         MemoryRegion *mr;
 
         object_initialize_child(OBJECT(s), name, &s->uart[i],
-                                TYPE_PL011);
+                                TYPE_FSL_LINFLEX);
         dev = DEVICE(&s->uart[i]);
         qdev_prop_set_chr(dev, "chardev", serial_hd(i));
         sysbus_realize(SYS_BUS_DEVICE(dev), &error_fatal);
@@ -243,7 +243,7 @@ static void fdt_add_uart_nodes(NxpS32gState *s)
     const MachineState *ms = MACHINE(s);
     uint64_t addrs[] = { MM_UART1, MM_UART0 };
     unsigned int irqs[] = { S32G_UART1_IRQ_0, S32G_UART0_IRQ_0 };
-    const char compat[] = "arm,pl011\0arm,sbsa-uart";
+    const char compat[] = "fsl,s32-linflexuart\0nxp,s32cc-linflexuart";
     const char clocknames[] = "uartclk\0apb_pclk";
     int i;
 
