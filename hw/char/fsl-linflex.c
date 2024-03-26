@@ -89,7 +89,7 @@ static void fsl_linflex_write(void *opaque, hwaddr offset,
                 qemu_chr_fe_accept_input(&s->chr);
             }
             // store new value of reg
-            s->regs[reg] = value;
+            s->regs[reg] &= ~value;
             // update irq if software clears DRFRFE/RMB
             fsl_linflex_update_irq(s);
             break;
