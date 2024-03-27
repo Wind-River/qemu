@@ -17,6 +17,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qemu/log.h"
 #include "hw/char/fsl-linflex.h"
 #include "hw/irq.h"
 #include "hw/qdev-properties.h"
@@ -51,33 +52,36 @@ static void fsl_linflex_write(void *opaque, hwaddr offset,
     uint32_t mask = 0x0;
     LinflexRegs reg = offset >> 2; // registers are 4 bytes wide
 
+    value = (uint32_t)value;
+
     switch (reg)
     {
         case LINFLEX_LINCR1:
-            s->regs[reg] = (uint32_t)value & 0x0001DF27;
+            s->regs[reg] = value & 0x0001DF27;
             if (s->regs[reg] & LINCR1_INIT) {
                 s->regs[LINFLEX_LINSR] |= LINSR_LINS_INIT;
             }
             break;
         case LINFLEX_LINIER:
-            s->regs[reg] = (uint32_t)value & 0x0000FFFF;
+            s->regs[reg] = value & 0x0000FFFF;
             fsl_linflex_update_irq(s);
             break;
         case LINFLEX_LINSR:
         case LINFLEX_LINESR:
+            qemu_log_mask(LOG_UNIMP, "%s: Register LINESR not implemented\n", __func__);
             break;
         case LINFLEX_UARTCR:
             if (s->regs[LINFLEX_LINCR1] & LINCR1_INIT) {
                 // uart mode can only be toggled in initialization mode
                 mask |= UARTCR_UART;
-                s->regs[reg] |= (uint32_t)value & UARTCR_UART;
+                s->regs[reg] |= value & UARTCR_UART;
                 // if uart mode is enabled and we are in init mode we can set the other fields
                 if (s->regs[reg] & UARTCR_UART) {
-                    s->regs[reg] |= (uint32_t)value;
+                    s->regs[reg] |= value;
                 }
             } else if (s->regs[reg] & UARTCR_UART) {
                 // certain fields are writable outside of initialization mode if uart mode is enabled
-                s->regs[reg] |= (uint32_t)value & 0x0070FC30;
+                s->regs[reg] |= value & 0x0070FC30;
             }
             break;
         case LINFLEX_UARTSR:
@@ -94,13 +98,28 @@ static void fsl_linflex_write(void *opaque, hwaddr offset,
             fsl_linflex_update_irq(s);
             break;
         case LINFLEX_LINTCSR:
+            qemu_log_mask(LOG_UNIMP, "%s: Register LINTCSR not implemented\n", __func__);
+            break;
         case LINFLEX_LINOCR:
+            qemu_log_mask(LOG_UNIMP, "%s: Register LINOCR not implemented\n", __func__);
+            break;
         case LINFLEX_LINTOCR:
+            qemu_log_mask(LOG_UNIMP, "%s: Register LINTOCR not implemented\n", __func__);
+            break;
         case LINFLEX_LINFBRR:
+            qemu_log_mask(LOG_UNIMP, "%s: Register LINFBRR not implemented\n", __func__);
+            break;
         case LINFLEX_LINIBRR:
+            qemu_log_mask(LOG_UNIMP, "%s: Register LINIBRR not implemented\n", __func__);
+            break;
         case LINFLEX_LINCFR:
+            qemu_log_mask(LOG_UNIMP, "%s: Register LINCFR not implemented\n", __func__);
+            break;
         case LINFLEX_LINCR2:
+            qemu_log_mask(LOG_UNIMP, "%s: Register LINCR2 not implemented\n", __func__);
+            break;
         case LINFLEX_BIDR:
+            qemu_log_mask(LOG_UNIMP, "%s: Register BIDR not implemented\n", __func__);
             break;
         case LINFLEX_BDRL:
             // write to uart mode buffer
@@ -108,20 +127,35 @@ static void fsl_linflex_write(void *opaque, hwaddr offset,
             // todo: _write_all is blocking, use _write
             ch = value;
             qemu_chr_fe_write_all(&s->chr, &ch, 1);
-            // update status reg to indicate data transmission completed
-            // and we are available for next transmission
-            // we are always available since this is synchronous with the memory write
+            /* Update UART status reg to indicate data transmission completed.
+             * We are always ready for next transmission since the execution
+             * of this callback is synchronous with the memory write.
+             */
             s->regs[LINFLEX_UARTSR] |= UARTSR_DTFTFF;
-            // todo: update irq?
+            // update irq
             fsl_linflex_update_irq(s);
             break;
         case LINFLEX_BDRM:
+            qemu_log_mask(LOG_UNIMP, "%s: Register BDRM not implemented\n", __func__);
+            break;
         case LINFLEX_GCR:
+            qemu_log_mask(LOG_UNIMP, "%s: Register GCR not implemented\n", __func__);
+            break;
         case LINFLEX_UARTPTO:
+            qemu_log_mask(LOG_UNIMP, "%s: Register UARTPTO not implemented\n", __func__);
+            break;
         case LINFLEX_UARTCTO:
+            qemu_log_mask(LOG_UNIMP, "%s: Register UARTCTO not implemented\n", __func__);
+            break;
         case LINFLEX_DMATXE:
+            qemu_log_mask(LOG_UNIMP, "%s: Register DMATXE not implemented\n", __func__);
+            break;
         case LINFLEX_DMARXE:
+            qemu_log_mask(LOG_UNIMP, "%s: Register DMARXE not implemented\n", __func__);
+            break;
         default:
+            qemu_log_mask(LOG_GUEST_ERROR, "%s: write to invalid register\n",
+                          __func__);
             break;
     }
 }
@@ -135,17 +169,9 @@ static uint64_t fsl_linflex_read(void *opaque, hwaddr offset,
 
     switch (reg)
     {
-        case LINFLEX_BDRM:
-            // read buffer
-            r = s->regs[reg] & 0xFF;
-            // todo: update status
-            // do we need to update status? software clears DRFRFE and RMB when it is done reading
-            // todo: update irq
-            fsl_linflex_update_irq(s);
-            // accept next char input now. do we though? only when drfrfe/rmb is cleared
-            // qemu_chr_fe_accept_input(&s->chr);
-            break;
         case LINFLEX_LINCR1:
+            r = s->regs[reg] |= 0x00000080; // bit 7 is always high
+            break;
         case LINFLEX_LINIER:
         case LINFLEX_LINSR:
         case LINFLEX_LINESR:
@@ -160,15 +186,28 @@ static uint64_t fsl_linflex_read(void *opaque, hwaddr offset,
         case LINFLEX_LINCR2:
         case LINFLEX_BIDR:
         case LINFLEX_BDRL:
+            qemu_log_mask(LOG_UNIMP, "%s: Unimplemented register read at offset 0x%"HWADDR_PRIx"\n",
+                         __func__, offset);
+            r = s->regs[reg];
+            break;
+        case LINFLEX_BDRM:
+            // read buffer
+            r = s->regs[reg] & 0xFF;
+            fsl_linflex_update_irq(s);
+            // accept next char input only when drfrfe/rmb is cleared
+            break;
         case LINFLEX_GCR:
         case LINFLEX_UARTPTO:
         case LINFLEX_UARTCTO:
         case LINFLEX_DMATXE:
         case LINFLEX_DMARXE:
+            qemu_log_mask(LOG_UNIMP, "%s: Unimplemented register read at offset 0x%"HWADDR_PRIx"\n",
+                         __func__, offset);
             r = s->regs[reg];
             break;
         default:
-            // todo: maybe log invalid reg read
+            qemu_log_mask(LOG_GUEST_ERROR, "%s: Invalid register read at offset 0x%"HWADDR_PRIx"\n",
+                         __func__, offset);
             r = 0;
             break;
     }
@@ -179,8 +218,7 @@ static void fsl_linflex_rx(void *opaque, const uint8_t *buf, int size)
 {
     FslLinflexState *s = opaque;
 
-    // check status
-
+    // Store character in read buffer
     s->regs[LINFLEX_BDRM] = *buf;
 
     // update status to indicate buffer full
@@ -270,7 +308,7 @@ static void fsl_linflex_init(Object *obj)
     // device tree says reg space has length 0x3000 but the
     // mmio space isn't actually that big
     memory_region_init_io(&s->iomem, obj, &fsl_linflex_ops,
-                          s, "uart0", 0x1000);
+                          s, "uart", 0x1000);
     sysbus_init_mmio(sbd, &s->iomem);
 
     sysbus_init_irq(sbd, &s->irq);

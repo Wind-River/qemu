@@ -23,8 +23,6 @@
 #include "chardev/char-fe.h"
 #include "qom/object.h"
 
-#define UART_BUF_SZ 8
-
 #define TYPE_FSL_LINFLEX    "fsl.s32v234-linflexuart"
 OBJECT_DECLARE_SIMPLE_TYPE(FslLinflexState, FSL_LINFLEX)
 
@@ -65,50 +63,50 @@ struct FslLinflexState {
 };
 
 /* LINFlex Control Register */
-#define LINCR1_INIT         (1 << 0)
+#define LINCR1_INIT         (0x1 << 0)
 
 /* LINFlex Status Register */
 #define LINSR_LINS_MASK     (0xF << 15)
-#define LINSR_LINS_INIT     (1 << 12)
+#define LINSR_LINS_INIT     (0x1 << 12)
 
 /* LINFlex Interrupt Enable Register */
-#define LINIER_DTIE         (1 << 1)
-#define LINIER_DRIE         (1 << 2)
+#define LINIER_DTIE         (0x1 << 1)
+#define LINIER_DRIE         (0x1 << 2)
 
-/* UART Control Register */
-#define UARTCR_UART         (1 << 0)
-#define UARTCR_WL0          (1 << 1)
-#define UARTCR_PCE          (1 << 2)
-#define UARTCR_PC0          (1 << 3)
-#define UARTCR_TXEN         (1 << 4)
-#define UARTCR_RXEN         (1 << 5)
-#define UARTCR_PC1          (1 << 6)
-#define UARTCR_WL1          (1 << 7)
-#define UARTCR_TFBM         (1 << 8)
-#define UARTCR_RFBM         (1 << 9)
-#define UARTCR_RDFL_RFC     (7 << 12)
-#define UARTCR_TDFL_TFC     (7 << 15)
-#define UARTCR_SBUR         (3 << 18)
-#define UARTCR_DTU_PCETX    (1 << 19)
-#define UARTCR_NEF          (7 << 22)
-#define UARTCR_ROSE         (1 << 23)
-#define UARTCR_OSR          (15 << 27)
-#define UARTCR_CSP          (7 << 30)
-#define UARTCR_MIS          (1 << 31)
+/* UART Control Register Fields */
+#define UARTCR_UART         (0x1 << 0)
+#define UARTCR_WL0          (0x1 << 1)
+#define UARTCR_PCE          (0x1 << 2)
+#define UARTCR_PC0          (0x1 << 3)
+#define UARTCR_TXEN         (0x1 << 4)
+#define UARTCR_RXEN         (0x1 << 5)
+#define UARTCR_PC1          (0x1 << 6)
+#define UARTCR_WL1          (0x1 << 7)
+#define UARTCR_TFBM         (0x1 << 8)
+#define UARTCR_RFBM         (0x1 << 9)
+#define UARTCR_RDFL_RFC     (0x7 << 12)
+#define UARTCR_TDFL_TFC     (0x7 << 15)
+#define UARTCR_SBUR         (0x3 << 18)
+#define UARTCR_DTU_PCETX    (0x1 << 19)
+#define UARTCR_NEF          (0x7 << 22)
+#define UARTCR_ROSE         (0x1 << 23)
+#define UARTCR_OSR          (0xF << 27)
+#define UARTCR_CSP          (0x7 << 30)
+#define UARTCR_MIS          (0x1 << 31)
 
-/* UART Status Register */
-#define UARTSR_NF           (1 << 0)
-#define UARTSR_DTFTFF       (1 << 1)
-#define UARTSR_DRFRFE       (1 << 2)
-#define UARTSR_TO           (1 << 3)
-#define UARTSR_RFNE         (1 << 4)
-#define UARTSR_WUF          (1 << 5)
-#define UARTSR_RDI          (1 << 6)
-#define UARTSR_BOF          (1 << 7)
-#define UARTSR_FEF          (1 << 8)
-#define UARTSR_RMB          (1 << 9)
-#define UARTSR_PE           (15 << 13)
-#define UARTSR_OCF          (1 << 14)
-#define UARTSR_SZF          (1 << 15)
+/* UART Status Register Fields */
+#define UARTSR_NF           (0x1 << 0)
+#define UARTSR_DTFTFF       (0x1 << 1)
+#define UARTSR_DRFRFE       (0x1 << 2)
+#define UARTSR_TO           (0x1 << 3)
+#define UARTSR_RFNE         (0x1 << 4)
+#define UARTSR_WUF          (0x1 << 5)
+#define UARTSR_RDI          (0x1 << 6)
+#define UARTSR_BOF          (0x1 << 7)
+#define UARTSR_FEF          (0x1 << 8)
+#define UARTSR_RMB          (0x1 << 9)
+#define UARTSR_PE           (0xF << 13)
+#define UARTSR_OCF          (0x1 << 14)
+#define UARTSR_SZF          (0x1 << 15)
 
 #endif // FSL_LINFLEXUART_H
