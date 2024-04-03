@@ -213,6 +213,45 @@ static void s32g_create_uart(NxpS32gState *s, qemu_irq *irqmap)
     }
 }
 
+static void create_virtio_devices(NxpS32gState *s)
+{
+    int i;
+    MachineState *ms = MACHINE(s);
+
+    for (i = 0; i < NUM_VIRTIO_TRANSPORTS; i++) {
+        int irq = S32G_VIRTIO_IRQ_BASE + i;
+        hwaddr base = MM_VIRTIO_BASE + i * MM_VIRTIO_SIZE;
+
+        sysbus_create_simple("virtio-mmio", base,
+                             qdev_get_gpio_in(DEVICE(&s->gic), irq));
+    }
+
+    /* We add dtb nodes in reverse order so that they appear in the finished
+     * device tree lowest address first.
+     *
+     * Note that this mapping is independent of the loop above. The previous
+     * loop influences virtio device to virtio transport assignment, whereas
+     * this loop controls how virtio transports are laid out in the dtb.
+     */
+    for (i = NUM_VIRTIO_TRANSPORTS - 1; i >= 0; i--) {
+        char *nodename;
+        int irq = S32G_VIRTIO_IRQ_BASE + i;
+        hwaddr base = MM_VIRTIO_BASE + i * MM_VIRTIO_SIZE;
+
+        nodename = g_strdup_printf("/virtio_mmio@%" PRIx64, base);
+        qemu_fdt_add_subnode(ms->fdt, nodename);
+        qemu_fdt_setprop_string(ms->fdt, nodename,
+                                "compatible", "virtio,mmio");
+        qemu_fdt_setprop_sized_cells(ms->fdt, nodename, "reg",
+                                     2, base, 2, MM_VIRTIO_SIZE);
+        qemu_fdt_setprop_cells(ms->fdt, nodename, "interrupts",
+                               GIC_FDT_IRQ_TYPE_SPI, irq,
+                               GIC_FDT_IRQ_FLAGS_EDGE_LO_HI);
+        qemu_fdt_setprop(ms->fdt, nodename, "dma-coherent", NULL, 0);
+        g_free(nodename);
+    }
+}
+
 static void fdt_add_cpu_nodes(NxpS32gState *s)
 {
     int i;
@@ -363,13 +402,13 @@ static void nxp_s32g_init(MachineState *machine)
     s->psci_conduit = QEMU_PSCI_CONDUIT_SMC;
     s->mr = get_system_memory();
 
-    fdt_create(s);
-    
     s32g_create_cpus(s);
 
+    fdt_create(s);
     fdt_add_cpu_nodes(s);
     fdt_add_clk_nodes(s);
     fdt_add_timer_nodes(s);
+
 
     /* add physical memory region to bus */
     /* todo: physmem starts at 0x8000_0000 but has a jump
@@ -380,6 +419,9 @@ static void nxp_s32g_init(MachineState *machine)
     s32g_create_gic(s, irqmap);
 
     fdt_add_gic_nodes(s);
+
+    // virtio transports must be created after gic
+    create_virtio_devices(s);
 
     s32g_create_uart(s, irqmap);
 

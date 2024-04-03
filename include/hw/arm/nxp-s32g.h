@@ -77,10 +77,16 @@ struct NxpS32gState {
 #define MM_GIC_REDIST_SIZE        0x200000
 #define MM_UART0                  0x401c8000
 #define MM_UART1                  0x401cc000
+#define MM_VIRTIO_BASE            0x0a000000
+#define MM_VIRTIO_SIZE            0x200
 
 /* UART */
 #define S32G_NUM_UART             2
 #define S32G_UART0_IRQ_0          82
 #define S32G_UART1_IRQ_0          83
+
+/* virtio */
+#define NUM_VIRTIO_TRANSPORTS     4
+#define S32G_VIRTIO_IRQ_BASE      0x68
 
 #endif /* QEMU_NXP_S32G_H */
