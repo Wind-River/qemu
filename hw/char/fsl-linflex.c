@@ -17,6 +17,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "migration/vmstate.h"
 #include "qemu/log.h"
 #include "hw/char/fsl-linflex.h"
 #include "hw/irq.h"
@@ -286,6 +287,13 @@ static void fsl_linflex_reset_hold(Object *obj)
     // hack for direct kernel boot since there
     // is no firmware to initialize the device
     s->regs[LINFLEX_UARTSR] |= UARTSR_DTFTFF;
+}
+
+static void fsl_linflex_reset_exit(Object *obj)
+{
+    FslLinflexState *s = FSL_LINFLEX(obj);
+
+    fsl_linflex_update_irq(s);
 
     qemu_chr_fe_accept_input(&s->chr);
 }
@@ -315,6 +323,30 @@ static void fsl_linflex_init(Object *obj)
 
 }
 
+static int fsl_linflex_post_load(void *opaque, int  version_id)
+{
+    FslLinflexState *s = opaque;
+
+    /* At exit from reset, LINIER is not set.
+     * After restoring the register state from snapshot,
+     * raise interrupts if the device is configured to do so.
+     */
+    fsl_linflex_update_irq(s);
+
+    return 0;
+}
+
+static const VMStateDescription vmstate_fsl_linflex = {
+    .name = "fsl_linflex",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .post_load = fsl_linflex_post_load,
+    .fields = (VMStateField[]) {
+        VMSTATE_UINT32_ARRAY(regs, FslLinflexState, LINFLEX_REGS_MAX),
+        VMSTATE_END_OF_LIST()
+    },
+};
+
 static Property fsl_linflex_properties[] = {
     DEFINE_PROP_CHR("chardev", FslLinflexState, chr),
     DEFINE_PROP_END_OF_LIST(),
@@ -326,8 +358,10 @@ static void fsl_linflex_class_init(ObjectClass *oc, void *data)
     ResettableClass *rc = RESETTABLE_CLASS(oc);
 
     dc->realize = fsl_linflex_realize;
+    dc->vmsd = &vmstate_fsl_linflex;
     rc->phases.enter = fsl_linflex_reset_init;
     rc->phases.hold = fsl_linflex_reset_hold;
+    rc->phases.exit = fsl_linflex_reset_exit;
     device_class_set_props(dc, fsl_linflex_properties);
 }
 
