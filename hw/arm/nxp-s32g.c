@@ -71,11 +71,12 @@ static void s32g_set_virt(Object *obj, bool value, Error **errp)
 static void s32g_create_cpus(NxpS32gState *s)
 {
     int i;
+    const MachineState *ms = MACHINE(s);
 
     object_initialize_child(OBJECT(s), "cpu-cluster", &s->ap_cluster, 
                             TYPE_CPU_CLUSTER);
     qdev_prop_set_uint32(DEVICE(&s->ap_cluster), "cluster-id", 0);
-    for (i = 0; i < ARRAY_SIZE(s->ap_cpu); i++) {
+    for (i = 0; i < ms->smp.cpus; i++) {
         Object *obj;
 
         object_initialize_child(OBJECT(&s->ap_cluster),
@@ -96,7 +97,7 @@ static void s32g_create_cpus(NxpS32gState *s)
             object_property_set_bool(obj, "has_el2", false, NULL);
         }
 
-        object_property_set_int(obj, "core-count", ARRAY_SIZE(s->ap_cpu),
+        object_property_set_int(obj, "core-count", S32G_CORES_PER_CPU,
                                 &error_abort);
         object_property_set_link(obj, "memory", OBJECT(s->mr),
                                  &error_abort);
@@ -116,7 +117,8 @@ static void s32g_create_gic(NxpS32gState *s, qemu_irq *irqmap)
     DeviceState *gicdev;
     uint32_t redist0_cap, redist0_cnt;
     QList *redist_region_count;
-    int nr_cpus = ARRAY_SIZE(s->ap_cpu);
+    const MachineState *ms = MACHINE(s);
+    int nr_cpus = ms->smp.cpus;
     int i;
 
     object_initialize_child(OBJECT(s), "gic", &s->gic,
