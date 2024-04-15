@@ -20,6 +20,8 @@
 
 #include "qemu/osdep.h"
 #include "hw/sysbus.h"
+#include "migration/vmstate.h"
+#include "hw/qdev-properties.h"
 #include "hw/net/fsl_flexcan.h"
 
 REG32(MODULE_CONFIGURATION_REGISTER, 0X0)
@@ -101,3 +103,74 @@ REG32(INTERRUPT_MASKS_2_REGISTER, 0x24)
     FIELD(INTERRUPT_MASKS_2_REGISTER, BUF63TO32M,   0, 32)
 REG32(INTERRUPT_MASKS_1_REGISTER, 0x28)
     FIELD(INTERRUPT_MASKS_1_REGISTER, BUF31TO0M,    0, 32)
+
+static void flexcan_realize(DeviceState *dev, Error **errp)
+{
+    FslFlexCanState *s = FSL_FLEXCAN(dev);
+
+    // todo: look into use of RegisterInfoArray subregion
+    sysbus_init_mmio(SYS_BUS_DEVICE(dev), &s->iomem);
+    sysbus_init_irq(SYS_BUS_DEVICE(dev), &s->canfd_irq);
+    // todo: connect s->flexcanbus
+}
+
+static void flexcan_reset(DeviceState *dev)
+{
+    FslFlexCanState *s = FSL_FLEXCAN(dev);
+    unsigned int i;
+
+    for (i = 0; i < ARRAY_SIZE(s->regs); ++i) {
+        // todo: reset to correct values
+        s->regs[i] = 0;
+    }
+}
+
+static void flexcan_init(Object *obj)
+{
+    FslFlexCanState *s = FSL_FLEXCAN(obj);
+
+    memory_region_init(&s->iomem, obj, TYPE_FSL_FLEXCAN,
+                       FLEXCAN_R_MAX * 4);
+}
+
+static const VMStateDescription vmstate_flexcan = {
+    .name = TYPE_FSL_FLEXCAN,
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .fields = (VMStateField[]) {
+        VMSTATE_UINT32_ARRAY(regs, FslFlexCanState, FLEXCAN_R_MAX),
+        VMSTATE_END_OF_LIST(),
+    }
+};
+
+static Property flexcan_core_properties[] = {
+    // todo: other properties?
+    DEFINE_PROP_LINK("flexcanbus", FslFlexCanState, flexcanbus,
+                     TYPE_CAN_BUS, CanBusState *),
+    DEFINE_PROP_END_OF_LIST(),
+};
+
+static void flexcan_class_init(ObjectClass *oc, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(oc);
+
+    dc->reset = flexcan_reset;
+    dc->realize = flexcan_realize;
+    device_class_set_props(dc, flexcan_core_properties);
+    dc->vmsd = &vmstate_flexcan;
+}
+
+static const TypeInfo flexcan_info = {
+    .name           = TYPE_FSL_FLEXCAN,
+    .parent         = TYPE_SYS_BUS_DEVICE,
+    .instance_size  = sizeof(FslFlexCanState),
+    .class_init     = flexcan_class_init,
+    .instance_init  = flexcan_init,
+};
+
+static void flexcan_register_types(void)
+{
+    type_register_static(&flexcan_info);
+}
+
+type_init(flexcan_register_types)

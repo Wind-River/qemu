@@ -36,7 +36,11 @@ OBJECT_DECLARE_SIMPLE_TYPE(FslFlexCanState, FSL_FLEXCAN)
 #define FLEXCAN_R_MAX       (OFFSET_ERFFEL127 / 4) + 1
 
 typedef struct FslFlexCanState {
-    uint32_t        regs[FLEXCAN_R_MAX];
+    MemoryRegion        iomem;
+    qemu_irq            canfd_irq;
+    CanBusClientState   bus_client;
+    CanBusState         *flexcanbus;
+    uint32_t            regs[FLEXCAN_R_MAX];
 } FslFlexCanState;
 
 #endif // HW_FLEXCAN_FSL_H
