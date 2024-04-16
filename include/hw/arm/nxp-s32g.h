@@ -45,7 +45,7 @@ struct NxpS32gState {
     ARMCPU ap_cpu[S32G_MAX_ACPUS];
     GICv3State gic;
 
-    PL011State uart[S32G_NUM_UART];
+    FslLinflexState uart[S32G_NUM_UART];
 
     MemoryRegion *mr;
 
