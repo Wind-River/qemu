@@ -42,6 +42,7 @@ typedef struct FslFlexCanState {
     CanBusClientState   bus_client;
     CanBusState         *flexcanbus;
     uint32_t            regs[FLEXCAN_R_MAX];
+    RegisterInfo        reg_info[FLEXCAN_R_MAX];
 } FslFlexCanState;
 
 #endif // HW_FLEXCAN_FSL_H
