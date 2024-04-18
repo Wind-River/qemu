@@ -58,16 +58,16 @@ REG32(CONTROL_1_REGISTER, 0x4)
     FIELD(CONTROL_1_REGISTER, LBUF,     4,  1)
     FIELD(CONTROL_1_REGISTER, LOM,      3,  1)
     FIELD(CONTROL_1_REGISTER, PROPSEG,  0,  3)
-REG32(CAN_FD_CONTROL_REGISTER, 0xC00)
-    FIELD(CAN_FD_CONTROL_REGISTER, FDRATE,  31, 1)
-    FIELD(CAN_FD_CONTROL_REGISTER, MBDSR3,  25, 2)
-    FIELD(CAN_FD_CONTROL_REGISTER, MBDSR2,  22, 2)
-    FIELD(CAN_FD_CONTROL_REGISTER, MBDSR1,  19, 2)
-    FIELD(CAN_FD_CONTROL_REGISTER, MBDSR0,  16, 2)
-    FIELD(CAN_FD_CONTROL_REGISTER, TDCEN,   15, 1)
-    FIELD(CAN_FD_CONTROL_REGISTER, TDCFAIL, 14, 1)
-    FIELD(CAN_FD_CONTROL_REGISTER, TDCOFF,  8,  5)
-    FIELD(CAN_FD_CONTROL_REGISTER, TDCVAL,  0,  6)
+REG32(RX_MAILBOXES_GLOBAL_MASK_REGISTER, 0x10)
+    FIELD(RX_MAILBOXES_GLOBAL_MASK_REGISTER, MG, 0, 32)
+REG32(RX_14_MASK_REGISTER, 0x14)
+    FIELD(RX_14_MASK_REGISTER, RX14M, 0, 32)
+REG32(RX_15_MASK_REGISTER, 0x18)
+    FIELD(RX_15_MASK_REGISTER, RX15M, 0, 32)
+REG32(INTERRUPT_MASKS_2_REGISTER, 0x24)
+    FIELD(INTERRUPT_MASKS_2_REGISTER, BUF63TO32M,   0, 32)
+REG32(INTERRUPT_MASKS_1_REGISTER, 0x28)
+    FIELD(INTERRUPT_MASKS_1_REGISTER, BUF31TO0M,    0, 32)
 REG32(CONTROL_2_REGISTER, 0x34)
     FIELD(CONTROL_2_REGISTER, ERRMSK_FAST,  31, 1)
     FIELD(CONTROL_2_REGISTER, BOFFDONEMSK,  30, 1)
@@ -85,12 +85,6 @@ REG32(CONTROL_2_REGISTER, 0x34)
     FIELD(CONTROL_2_REGISTER, EDFLTDIS,     11, 1)
     FIELD(CONTROL_2_REGISTER, MBTSBASE,     8,  2)
     FIELD(CONTROL_2_REGISTER, TSTAMPCAP,    6,  2)
-REG32(RX_MAILBOXES_GLOBAL_MASK_REGISTER, 0x10)
-    FIELD(RX_MAILBOXES_GLOBAL_MASK_REGISTER, MG, 0, 32)
-REG32(RX_14_MASK_REGISTER, 0x14)
-    FIELD(RX_14_MASK_REGISTER, RX14M, 0, 32)
-REG32(RX_15_MASK_REGISTER, 0x18)
-    FIELD(RX_15_MASK_REGISTER, RX15M, 0, 32)
 REG32(MEMORY_ERROR_CONTROL_REGISTER, 0xAE0)
     FIELD(MEMORY_ERROR_CONTROL_REGISTER, ECRWRDIS,  31, 1)
     FIELD(MEMORY_ERROR_CONTROL_REGISTER, HAERRIE,   15, 1)
@@ -99,16 +93,163 @@ REG32(MEMORY_ERROR_CONTROL_REGISTER, 0xAE0)
     FIELD(MEMORY_ERROR_CONTROL_REGISTER, RERRDIS,   9,  1)
     FIELD(MEMORY_ERROR_CONTROL_REGISTER, ECCDIS,    8,  1)
     FIELD(MEMORY_ERROR_CONTROL_REGISTER, NCEFAFRZ,  7,  1)
-REG32(INTERRUPT_MASKS_2_REGISTER, 0x24)
-    FIELD(INTERRUPT_MASKS_2_REGISTER, BUF63TO32M,   0, 32)
-REG32(INTERRUPT_MASKS_1_REGISTER, 0x28)
-    FIELD(INTERRUPT_MASKS_1_REGISTER, BUF31TO0M,    0, 32)
+REG32(CAN_FD_CONTROL_REGISTER, 0xC00)
+    FIELD(CAN_FD_CONTROL_REGISTER, FDRATE,  31, 1)
+    FIELD(CAN_FD_CONTROL_REGISTER, MBDSR3,  25, 2)
+    FIELD(CAN_FD_CONTROL_REGISTER, MBDSR2,  22, 2)
+    FIELD(CAN_FD_CONTROL_REGISTER, MBDSR1,  19, 2)
+    FIELD(CAN_FD_CONTROL_REGISTER, MBDSR0,  16, 2)
+    FIELD(CAN_FD_CONTROL_REGISTER, TDCEN,   15, 1)
+    FIELD(CAN_FD_CONTROL_REGISTER, TDCFAIL, 14, 1)
+    FIELD(CAN_FD_CONTROL_REGISTER, TDCOFF,  8,  5)
+    FIELD(CAN_FD_CONTROL_REGISTER, TDCVAL,  0,  6)
+
+static uint64_t flexcan_reg_prewrite(RegisterInfo *reg, uint64_t val64)
+{
+    uint32_t val = val64;
+
+    return val;
+}
+
+static void flexcan_mcr_postwrite(RegisterInfo *reg, uint64_t val64)
+{
+    FslFlexCanState *s = FSL_FLEXCAN(reg->opaque);
+
+    if (!ARRAY_FIELD_EX32(s->regs, MODULE_CONFIGURATION_REGISTER, MDIS)) {
+        ARRAY_FIELD_DP32(s->regs, MODULE_CONFIGURATION_REGISTER, LPMACK, 0);
+    }
+
+    if (ARRAY_FIELD_EX32(s->regs, MODULE_CONFIGURATION_REGISTER, SOFTRST)) {
+        // These registers are affected by soft reset:
+        /* From Table 377, S32G3 Reference Manual Rev 3.1
+           MCR
+           TIMER
+           ECR
+           ESR1
+           IMASK2
+           IMASK1
+           IFLAG2
+           IFLAG1
+           ESR2
+           CRCR
+           IMASK4
+           IMASK3
+           IFLAG4
+           IFLAG3
+           MECR
+           ERRIAR
+           ERRIDPR
+           ERRIPPR
+           RERRAR
+           RERRDR
+           RERRSYNR
+           ERRSR
+           FDCRC
+           ERFCR
+           ERFIER
+           ERFSR
+        */
+        register_reset(&s->reg_info[R_INTERRUPT_MASKS_2_REGISTER]);
+        register_reset(&s->reg_info[R_INTERRUPT_MASKS_1_REGISTER]);
+        register_reset(&s->reg_info[R_MEMORY_ERROR_CONTROL_REGISTER]);
+        register_reset(&s->reg_info[R_CAN_FD_CONTROL_REGISTER]);
+        // clear soft reset bit once registers have been reset
+        ARRAY_FIELD_DP32(s->regs, MODULE_CONFIGURATION_REGISTER, SOFTRST, 0);
+    }
+}
+
+static const RegisterAccessInfo flexcan_regs_info[] = {
+    {   .name = "MODULE_CONFIGURATION_REGISTER",
+        .addr = A_MODULE_CONFIGURATION_REGISTER,
+        .reset = 0xD890000F,
+        .pre_write = flexcan_reg_prewrite,
+        .post_write = flexcan_mcr_postwrite,
+    },{ .name = "CONTROL_1_REGISTER",
+        .addr = A_CONTROL_1_REGISTER,
+        .pre_write = flexcan_reg_prewrite,
+    },{ .name = "RX_MAILBOXES_GLOBAL_MASK_REGISTER",
+        .addr = A_RX_MAILBOXES_GLOBAL_MASK_REGISTER,
+        .pre_write = flexcan_reg_prewrite,
+    },{ .name = "RX_14_MASK_REGISTER",
+        .addr = A_RX_14_MASK_REGISTER,
+        .pre_write = flexcan_reg_prewrite,
+    },{ .name = "RX_15_MASK_REGISTER",
+        .addr = A_RX_15_MASK_REGISTER,
+        .pre_write = flexcan_reg_prewrite,
+    },{ .name = "INTERRUPT_MASKS_2_REGISTER",
+        .addr = A_INTERRUPT_MASKS_2_REGISTER,
+        .pre_write = flexcan_reg_prewrite,
+    },{ .name = "INTERRUPT_MASKS_1_REGISTER",
+        .addr = A_INTERRUPT_MASKS_1_REGISTER,
+        .pre_write = flexcan_reg_prewrite,
+    },{ .name = "CONTROL_2_REGISTER",
+        .addr = A_CONTROL_2_REGISTER,
+        .reset = 0x00100000,
+        .pre_write = flexcan_reg_prewrite,
+    },{ .name = "MEMORY_ERROR_CONTROL_REGISTER",
+        .addr = A_MEMORY_ERROR_CONTROL_REGISTER,
+        .reset = 0x800C0080,
+        .pre_write = flexcan_reg_prewrite,
+    },{ .name = "CAN_FD_CONTROL_REGISTER",
+        .addr = A_CAN_FD_CONTROL_REGISTER,
+        .reset = 0x80000100,
+        .pre_write = flexcan_reg_prewrite,
+    }
+};
+
+static const MemoryRegionOps flexcan_mr_ops = {
+    .read = register_read_memory,
+    .write = register_write_memory,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4,
+    },
+};
+
+static RegisterInfoArray *flexcan_create_regs(FslFlexCanState *s)
+{
+    int num_regs;
+    int i;
+    RegisterInfoArray *reg_array;
+
+    num_regs = ARRAY_SIZE(flexcan_regs_info);
+
+    reg_array = g_new0(RegisterInfoArray, 1);
+    reg_array->r = g_new0(RegisterInfo *, num_regs);
+    reg_array->num_elements = num_regs;
+    reg_array->prefix = object_get_typename(OBJECT(s));
+
+    for (i = 0; i < num_regs; i++) {
+        int index = flexcan_regs_info[i].addr / 4;
+        RegisterInfo *r = &s->reg_info[index];
+
+        object_initialize(r, sizeof(*r), TYPE_REGISTER);
+
+        *r = (RegisterInfo) {
+            .data = &s->regs[index],
+            .data_size = sizeof(uint32_t),
+            .access = &flexcan_regs_info[i],
+            .opaque = OBJECT(s),
+        };
+        reg_array->r[i] = r;
+    }
+
+    memory_region_init_io(&reg_array->mem, OBJECT(s), &flexcan_mr_ops,
+                          reg_array, reg_array->prefix, FLEXCAN_R_MAX * 4);
+
+    return reg_array;
+}
 
 static void flexcan_realize(DeviceState *dev, Error **errp)
 {
     FslFlexCanState *s = FSL_FLEXCAN(dev);
+    RegisterInfoArray *reg_array;
 
     // todo: look into use of RegisterInfoArray subregion
+    reg_array = flexcan_create_regs(s);
+    memory_region_add_subregion(&s->iomem, 0x0, &reg_array->mem);
+
     sysbus_init_mmio(SYS_BUS_DEVICE(dev), &s->iomem);
     sysbus_init_irq(SYS_BUS_DEVICE(dev), &s->canfd_irq);
     // todo: connect s->flexcanbus
@@ -119,9 +260,8 @@ static void flexcan_reset(DeviceState *dev)
     FslFlexCanState *s = FSL_FLEXCAN(dev);
     unsigned int i;
 
-    for (i = 0; i < ARRAY_SIZE(s->regs); ++i) {
-        // todo: reset to correct values
-        s->regs[i] = 0;
+    for (i = 0; i < ARRAY_SIZE(s->reg_info); ++i) {
+        register_reset(&s->reg_info[i]);
     }
 }
 
