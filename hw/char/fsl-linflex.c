@@ -65,7 +65,6 @@ static void fsl_linflex_write(void *opaque, hwaddr offset,
             break;
         case LINFLEX_LINIER:
             s->regs[reg] = value & 0x0000FFFF;
-            fsl_linflex_update_irq(s);
             break;
         case LINFLEX_LINSR:
         case LINFLEX_LINESR:
@@ -95,8 +94,6 @@ static void fsl_linflex_write(void *opaque, hwaddr offset,
             }
             // store new value of reg
             s->regs[reg] &= ~value;
-            // update irq if software clears DRFRFE/RMB
-            fsl_linflex_update_irq(s);
             break;
         case LINFLEX_LINTCSR:
             qemu_log_mask(LOG_UNIMP, "%s: Register LINTCSR not implemented\n", __func__);
@@ -133,8 +130,6 @@ static void fsl_linflex_write(void *opaque, hwaddr offset,
              * of this callback is synchronous with the memory write.
              */
             s->regs[LINFLEX_UARTSR] |= UARTSR_DTFTFF;
-            // update irq
-            fsl_linflex_update_irq(s);
             break;
         case LINFLEX_BDRM:
             qemu_log_mask(LOG_UNIMP, "%s: Register BDRM not implemented\n", __func__);
@@ -159,6 +154,8 @@ static void fsl_linflex_write(void *opaque, hwaddr offset,
                           __func__);
             break;
     }
+    // update irq on all writes
+    fsl_linflex_update_irq(s);
 }
 
 static uint64_t fsl_linflex_read(void *opaque, hwaddr offset,
