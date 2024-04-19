@@ -191,7 +191,7 @@ static uint64_t fsl_linflex_read(void *opaque, hwaddr offset,
         case LINFLEX_BDRM:
             // read buffer
             r = s->regs[reg] & 0xFF;
-            fsl_linflex_update_irq(s);
+            //fsl_linflex_update_irq(s);
             // accept next char input only when drfrfe/rmb is cleared
             break;
         case LINFLEX_GCR:
