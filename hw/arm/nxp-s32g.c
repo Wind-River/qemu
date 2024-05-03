@@ -215,6 +215,39 @@ static void s32g_create_uart(NxpS32gState *s, qemu_irq *irqmap)
     }
 }
 
+static void s32g_create_flexcan(NxpS32gState *s, qemu_irq *irqmap)
+{
+    int i;
+    static const int irqs[] = { S32G_FLEXCAN0_IRQ_STATE, S32G_FLEXCAN1_IRQ_STATE };
+    static const uint64_t addrs[] = { MM_FLEXCAN0, MM_FLEXCAN1 };
+
+    for (i = 0; i < ARRAY_SIZE(s->flexcan); i++) {
+        char *name = g_strdup_printf("flexcan%d", i);
+        SysBusDevice *dev;
+        MemoryRegion *mr;
+
+        object_initialize_child(OBJECT(s), name, &s->flexcan[i],
+                                TYPE_FSL_FLEXCAN);
+        dev = SYS_BUS_DEVICE(&s->flexcan[i]);
+
+
+        object_property_set_link(OBJECT(&s->flexcan[i]), "canbus",
+                                 OBJECT(s->canbus[i]), &error_abort);
+
+        sysbus_realize(dev, &error_fatal);
+
+        mr = sysbus_mmio_get_region(dev, 0);
+        memory_region_add_subregion(s->mr, addrs[i], mr);
+
+        /* each flexcan has 4 irqs */
+        sysbus_connect_irq(dev, 0, irqmap[irqs[i]]);    // IRQ_STATE
+        sysbus_connect_irq(dev, 1, irqmap[irqs[i]+1]);  // IRQ_BERR
+        sysbus_connect_irq(dev, 2, irqmap[irqs[i]+2]);  // IRQ_MB_0_7
+        sysbus_connect_irq(dev, 3, irqmap[irqs[i]+3]);  // IRQ_MB_8_127
+        g_free(name);
+    }
+}
+
 static void create_virtio_devices(NxpS32gState *s)
 {
     int i;
@@ -251,6 +284,42 @@ static void create_virtio_devices(NxpS32gState *s)
                                GIC_FDT_IRQ_FLAGS_EDGE_LO_HI);
         qemu_fdt_setprop(ms->fdt, nodename, "dma-coherent", NULL, 0);
         g_free(nodename);
+    }
+}
+
+static void fdt_add_flexcan_nodes(NxpS32gState *s)
+{
+    const MachineState *ms = MACHINE(s);
+    static const int irqs[] = { S32G_FLEXCAN0_IRQ_STATE, S32G_FLEXCAN1_IRQ_STATE };
+    static const uint64_t addrs[] = { MM_FLEXCAN0, MM_FLEXCAN1 };
+    const char compat[] = "fsl,flexcan";
+    const char clocknames[] = "per";
+    unsigned int i;
+
+    for (i = 0; i < ARRAY_SIZE(s->flexcan); i++) {
+        char *name = g_strdup_printf("/flexcan@%" PRIx64, addrs[i]);
+        qemu_fdt_add_subnode(ms->fdt, name);
+        qemu_fdt_setprop(ms->fdt, name, "compatible", compat, sizeof(compat));
+
+        qemu_fdt_setprop_sized_cells(ms->fdt, name, "reg", 2, addrs[i],
+                                     2, 0xa000);
+        /* there are 4 irqs per flexcan */
+        qemu_fdt_setprop_cells(ms->fdt, name, "interrupts",
+                               GIC_FDT_IRQ_TYPE_SPI, irqs[i],
+                               GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+        qemu_fdt_setprop_cells(ms->fdt, name, "interrupts",
+                               GIC_FDT_IRQ_TYPE_SPI, irqs[i]+1,
+                               GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+        qemu_fdt_setprop_cells(ms->fdt, name, "interrupts",
+                               GIC_FDT_IRQ_TYPE_SPI, irqs[i]+2,
+                               GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+        qemu_fdt_setprop_cells(ms->fdt, name, "interrupts",
+                               GIC_FDT_IRQ_TYPE_SPI, irqs[i]+3,
+                               GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+
+        qemu_fdt_setprop_cells(ms->fdt, name, "clocks", s->flexcan_clock_phandle);
+        qemu_fdt_setprop(ms->fdt, name, "clock-names",
+                         clocknames, sizeof(clocknames));
     }
 }
 
@@ -435,6 +504,11 @@ static void nxp_s32g_init(MachineState *machine)
 
     fdt_add_uart_nodes(s);
 
+    s32g_create_flexcan(s, irqmap);
+
+    fdt_add_flexcan_nodes(s);
+
+
     s->binfo.ram_size = ram_size;
     s->binfo.board_id = -1;
     s->binfo.loader_start = S32G_PHYSMEM_BASE;
@@ -451,6 +525,16 @@ static void nxp_s32g_machine_instance_init(Object *obj)
     /* default to secure mode disabled and virtualization (el2) disabled */
     s->secure = false;
     s->virt = false;
+
+    object_property_add_link(obj, "canbus0", TYPE_CAN_BUS,
+                             (Object **)&s->canbus[0],
+                             object_property_allow_set_link,
+                             0);
+
+    object_property_add_link(obj, "canbus1", TYPE_CAN_BUS,
+                             (Object **)&s->canbus[1],
+                             object_property_allow_set_link,
+                             0);
 }
 
 static void nxp_s32g_machine_class_init(ObjectClass *oc, void *data)
