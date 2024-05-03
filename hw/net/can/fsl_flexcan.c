@@ -117,6 +117,8 @@ static void flexcan_mcr_postwrite(RegisterInfo *reg, uint64_t val64)
 
     if (!ARRAY_FIELD_EX32(s->regs, MODULE_CONFIGURATION_REGISTER, MDIS)) {
         ARRAY_FIELD_DP32(s->regs, MODULE_CONFIGURATION_REGISTER, LPMACK, 0);
+    } else {
+        ARRAY_FIELD_DP32(s->regs, MODULE_CONFIGURATION_REGISTER, LPMACK, 1);
     }
 
     if (ARRAY_FIELD_EX32(s->regs, MODULE_CONFIGURATION_REGISTER, SOFTRST)) {
@@ -149,12 +151,25 @@ static void flexcan_mcr_postwrite(RegisterInfo *reg, uint64_t val64)
            ERFIER
            ERFSR
         */
+        {
+            // MDIS bit in MCR is not affected by soft reset
+            uint8_t mdis = ARRAY_FIELD_EX32(s->regs, MODULE_CONFIGURATION_REGISTER, MDIS);
+            register_reset(&s->reg_info[R_MODULE_CONFIGURATION_REGISTER]);
+            ARRAY_FIELD_DP32(s->regs, MODULE_CONFIGURATION_REGISTER, MDIS, mdis);
+        }
         register_reset(&s->reg_info[R_INTERRUPT_MASKS_2_REGISTER]);
         register_reset(&s->reg_info[R_INTERRUPT_MASKS_1_REGISTER]);
         register_reset(&s->reg_info[R_MEMORY_ERROR_CONTROL_REGISTER]);
         register_reset(&s->reg_info[R_CAN_FD_CONTROL_REGISTER]);
         // clear soft reset bit once registers have been reset
         ARRAY_FIELD_DP32(s->regs, MODULE_CONFIGURATION_REGISTER, SOFTRST, 0);
+    }
+
+    if (ARRAY_FIELD_EX32(s->regs, MODULE_CONFIGURATION_REGISTER, HALT) &&
+        ARRAY_FIELD_EX32(s->regs, MODULE_CONFIGURATION_REGISTER, FRZ)) {
+        ARRAY_FIELD_DP32(s->regs, MODULE_CONFIGURATION_REGISTER, FRZACK, 1);
+    } else {
+        ARRAY_FIELD_DP32(s->regs, MODULE_CONFIGURATION_REGISTER, FRZACK, 0);
     }
 }
 
