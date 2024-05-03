@@ -40,7 +40,7 @@ typedef struct FslFlexCanState {
     MemoryRegion        iomem;
     qemu_irq            canfd_irq;
     CanBusClientState   bus_client;
-    CanBusState         *flexcanbus;
+    CanBusState         *canbus;
     uint32_t            regs[FLEXCAN_R_MAX];
     RegisterInfo        reg_info[FLEXCAN_R_MAX];
 } FslFlexCanState;
