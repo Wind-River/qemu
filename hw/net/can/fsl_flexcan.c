@@ -212,7 +212,28 @@ static const RegisterAccessInfo flexcan_regs_info[] = {
     }
 };
 
-static const MemoryRegionOps flexcan_mr_ops = {
+static void flexcan_mb_write(void *opaque, hwaddr offset,
+                             uint64_t value, unsigned size)
+{
+}
+
+static uint64_t flexcan_mb_read(void *opaque, hwaddr offset,
+                                unsigned size)
+{
+    return 0;
+}
+
+static const MemoryRegionOps flexcan_mb_ops = {
+    .read = flexcan_mb_read,
+    .write = flexcan_mb_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4,
+    },
+};
+
+static const MemoryRegionOps flexcan_reg_ops = {
     .read = register_read_memory,
     .write = register_write_memory,
     .endianness = DEVICE_LITTLE_ENDIAN,
@@ -222,20 +243,12 @@ static const MemoryRegionOps flexcan_mr_ops = {
     },
 };
 
-static RegisterInfoArray *flexcan_create_regs(FslFlexCanState *s)
+static void flexcan_realize(DeviceState *dev, Error **errp)
 {
-    int num_regs;
+    FslFlexCanState *s = FSL_FLEXCAN(dev);
     int i;
-    RegisterInfoArray *reg_array;
 
-    num_regs = ARRAY_SIZE(flexcan_regs_info);
-
-    reg_array = g_new0(RegisterInfoArray, 1);
-    reg_array->r = g_new0(RegisterInfo *, num_regs);
-    reg_array->num_elements = num_regs;
-    reg_array->prefix = object_get_typename(OBJECT(s));
-
-    for (i = 0; i < num_regs; i++) {
+    for (i = 0; i < ARRAY_SIZE(flexcan_regs_info); i++) {
         int index = flexcan_regs_info[i].addr / 4;
         RegisterInfo *r = &s->reg_info[index];
 
@@ -247,27 +260,27 @@ static RegisterInfoArray *flexcan_create_regs(FslFlexCanState *s)
             .access = &flexcan_regs_info[i],
             .opaque = OBJECT(s),
         };
-        reg_array->r[i] = r;
     }
 
-    memory_region_init_io(&reg_array->mem, OBJECT(s), &flexcan_mr_ops,
-                          reg_array, reg_array->prefix, FLEXCAN_R_MAX * 4);
+    // add mem region for registers to the top level memory region
+    memory_region_init_io(&s->reg_mem, OBJECT(s), &flexcan_reg_ops,
+                          s, "flexcan.reg", FLEXCAN_R_SZ);
+    memory_region_add_subregion(&s->flexcan, 0x0, &s->reg_mem);
 
-    return reg_array;
-}
+    // add mem region for message buffers to top level memory region
+    memory_region_init_io(&s->mb_mem, OBJECT(s), &flexcan_mb_ops,
+                          s, "flexcan.mb", FLEXCAN_MB_SZ);
+    memory_region_add_subregion(&s->flexcan, 0x80, &s->mb_mem);
 
-static void flexcan_realize(DeviceState *dev, Error **errp)
-{
-    FslFlexCanState *s = FSL_FLEXCAN(dev);
-    RegisterInfoArray *reg_array;
+    // init the top level memory region for mmio
+    sysbus_init_mmio(SYS_BUS_DEVICE(dev), &s->flexcan);
 
-    // todo: look into use of RegisterInfoArray subregion
-    reg_array = flexcan_create_regs(s);
-    memory_region_add_subregion(&s->iomem, 0x0, &reg_array->mem);
-
-    sysbus_init_mmio(SYS_BUS_DEVICE(dev), &s->iomem);
-    sysbus_init_irq(SYS_BUS_DEVICE(dev), &s->canfd_irq);
-    // todo: connect s->flexcanbus
+    // 4 irqs per instance
+    sysbus_init_irq(SYS_BUS_DEVICE(dev), &s->irq_state);
+    sysbus_init_irq(SYS_BUS_DEVICE(dev), &s->irq_berr);
+    sysbus_init_irq(SYS_BUS_DEVICE(dev), &s->irq_mb_0_7);
+    sysbus_init_irq(SYS_BUS_DEVICE(dev), &s->irq_mb_8_127);
+    // todo: connect s->canbus
 }
 
 static void flexcan_reset(DeviceState *dev)
@@ -283,9 +296,11 @@ static void flexcan_reset(DeviceState *dev)
 static void flexcan_init(Object *obj)
 {
     FslFlexCanState *s = FSL_FLEXCAN(obj);
-
-    memory_region_init(&s->iomem, obj, TYPE_FSL_FLEXCAN,
-                       FLEXCAN_R_MAX * 4);
+    /*
+     * init parent memory region of size large enough for entire mmio space
+     */
+    memory_region_init(&s->flexcan, obj, TYPE_FSL_FLEXCAN,
+                       FLEXCAN_MMIO_SZ);
 }
 
 static const VMStateDescription vmstate_flexcan = {
