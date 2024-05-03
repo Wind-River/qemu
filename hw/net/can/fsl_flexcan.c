@@ -300,7 +300,7 @@ static const VMStateDescription vmstate_flexcan = {
 
 static Property flexcan_core_properties[] = {
     // todo: other properties?
-    DEFINE_PROP_LINK("flexcanbus", FslFlexCanState, flexcanbus,
+    DEFINE_PROP_LINK("canbus", FslFlexCanState, canbus,
                      TYPE_CAN_BUS, CanBusState *),
     DEFINE_PROP_END_OF_LIST(),
 };
