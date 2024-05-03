@@ -193,10 +193,10 @@ static void s32g_create_gic(NxpS32gState *s, qemu_irq *irqmap)
 static void s32g_create_uart(NxpS32gState *s, qemu_irq *irqmap)
 {
     int i;
+    static const int irqs[] = { S32G_UART0_IRQ_0, S32G_UART1_IRQ_0};
+    static const uint64_t addrs[] = { MM_UART0, MM_UART1 };
 
     for (i = 0; i < ARRAY_SIZE(s->uart); i++) {
-        static const int irqs[] = { S32G_UART0_IRQ_0, S32G_UART1_IRQ_0};
-        static const uint64_t addrs[] = { MM_UART0, MM_UART1 };
         char *name = g_strdup_printf("uart%d", i);
         DeviceState *dev;
         MemoryRegion *mr;
@@ -285,7 +285,7 @@ static void fdt_add_uart_nodes(NxpS32gState *s)
     uint64_t addrs[] = { MM_UART1, MM_UART0 };
     unsigned int irqs[] = { S32G_UART1_IRQ_0, S32G_UART0_IRQ_0 };
     const char compat[] = "fsl,s32-linflexuart\0nxp,s32cc-linflexuart";
-    const char clocknames[] = "uartclk\0apb_pclk";
+    const char clocknames[] = "ipg";
     int i;
 
     for (i = 0; i < ARRAY_SIZE(addrs); i++) {
@@ -363,12 +363,18 @@ static void fdt_add_clk_nodes(NxpS32gState *s)
     MachineState *ms = MACHINE(s);
 
     s->clock_phandle = qemu_fdt_alloc_phandle(ms->fdt);
-    qemu_fdt_add_subnode(ms->fdt, "/apb-pclk");
-    qemu_fdt_setprop_string(ms->fdt, "/apb-pclk", "compatible", "fixed-clock");
-    qemu_fdt_setprop_cell(ms->fdt, "/apb-pclk", "#clock-cells", 0x0);
-    qemu_fdt_setprop_cell(ms->fdt, "/apb-pclk", "clock-frequency", 24000000);
-    qemu_fdt_setprop_string(ms->fdt, "/apb-pclk", "clock-output-names", "clk24mhz");
-    qemu_fdt_setprop_cell(ms->fdt, "/apb-pclk", "phandle", s->clock_phandle);
+    qemu_fdt_add_subnode(ms->fdt, "/ipg");
+    qemu_fdt_setprop_string(ms->fdt, "/ipg", "compatible", "fixed-clock");
+    qemu_fdt_setprop_cell(ms->fdt, "/ipg", "#clock-cells", 0x0);
+    qemu_fdt_setprop_cell(ms->fdt, "/ipg", "clock-frequency", 24000000);
+    qemu_fdt_setprop_cell(ms->fdt, "/ipg", "phandle", s->clock_phandle);
+
+    s->flexcan_clock_phandle = qemu_fdt_alloc_phandle(ms->fdt);
+    qemu_fdt_add_subnode(ms->fdt, "/per");
+    qemu_fdt_setprop_string(ms->fdt, "/per", "compatible", "fixed-clock");
+    qemu_fdt_setprop_cell(ms->fdt, "/per", "#clock-cells", 0x0);
+    qemu_fdt_setprop_cell(ms->fdt, "/per", "clock-frequency", 5000000);
+    qemu_fdt_setprop_cell(ms->fdt, "/per", "phandle", s->flexcan_clock_phandle);
 }
 
 static void fdt_create(NxpS32gState *s)
