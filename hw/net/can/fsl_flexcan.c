@@ -24,7 +24,7 @@
 #include "hw/qdev-properties.h"
 #include "hw/net/fsl_flexcan.h"
 
-REG32(MODULE_CONFIGURATION_REGISTER, 0X0)
+REG32(MODULE_CONFIGURATION_REGISTER, 0x0)
     FIELD(MODULE_CONFIGURATION_REGISTER, MDIS,      31, 1)
     FIELD(MODULE_CONFIGURATION_REGISTER, FRZ,       30, 1)
     FIELD(MODULE_CONFIGURATION_REGISTER, RFEN,      29, 1)
@@ -246,26 +246,18 @@ static const MemoryRegionOps flexcan_reg_ops = {
 static void flexcan_realize(DeviceState *dev, Error **errp)
 {
     FslFlexCanState *s = FSL_FLEXCAN(dev);
-    int i;
+    RegisterInfoArray *reg_array;
 
-    for (i = 0; i < ARRAY_SIZE(flexcan_regs_info); i++) {
-        int index = flexcan_regs_info[i].addr / 4;
-        RegisterInfo *r = &s->reg_info[index];
-
-        object_initialize(r, sizeof(*r), TYPE_REGISTER);
-
-        *r = (RegisterInfo) {
-            .data = &s->regs[index],
-            .data_size = sizeof(uint32_t),
-            .access = &flexcan_regs_info[i],
-            .opaque = OBJECT(s),
-        };
-    }
+    reg_array = register_init_block32(dev, flexcan_regs_info,
+                                      ARRAY_SIZE(flexcan_regs_info),
+                                      s->reg_info,
+                                      s->regs,
+                                      &flexcan_reg_ops,
+                                      NULL,
+                                      FLEXCAN_R_SZ);
 
     // add mem region for registers to the top level memory region
-    memory_region_init_io(&s->reg_mem, OBJECT(s), &flexcan_reg_ops,
-                          s, "flexcan.reg", FLEXCAN_R_SZ);
-    memory_region_add_subregion(&s->flexcan, 0x0, &s->reg_mem);
+    memory_region_add_subregion(&s->flexcan, 0x0, &reg_array->mem);
 
     // add mem region for message buffers to top level memory region
     memory_region_init_io(&s->mb_mem, OBJECT(s), &flexcan_mb_ops,
