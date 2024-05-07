@@ -46,7 +46,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(FslFlexCanState, FSL_FLEXCAN)
 #define FLEXCAN_MB_SZ       128 * 16
 
 // message buffer start offset
-#define FLEXCAN_MB_BASE     0x80
+#define FLEXCAN_MB_BASE     FLEXCAN_R_SZ
 
 // this is the size advertised in the device tree
 #define FLEXCAN_MMIO_SZ     0xA000
