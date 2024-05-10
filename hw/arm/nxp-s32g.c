@@ -241,9 +241,9 @@ static void s32g_create_flexcan(NxpS32gState *s, qemu_irq *irqmap)
 
         /* each flexcan has 4 irqs */
         sysbus_connect_irq(dev, 0, irqmap[irqs[i]]);    // IRQ_STATE
-        sysbus_connect_irq(dev, 1, irqmap[irqs[i]+1]);  // IRQ_BERR
-        sysbus_connect_irq(dev, 2, irqmap[irqs[i]+2]);  // IRQ_MB_0_7
-        sysbus_connect_irq(dev, 3, irqmap[irqs[i]+3]);  // IRQ_MB_8_127
+        sysbus_connect_irq(dev, 0, irqmap[irqs[i]+1]);  // IRQ_BERR
+        sysbus_connect_irq(dev, 0, irqmap[irqs[i]+2]);  // IRQ_MB_0_7
+        sysbus_connect_irq(dev, 0, irqmap[irqs[i]+3]);  // IRQ_MB_8_127
         g_free(name);
     }
 }
