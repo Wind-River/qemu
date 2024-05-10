@@ -59,6 +59,28 @@ OBJECT_DECLARE_SIMPLE_TYPE(FslFlexCanState, FSL_FLEXCAN)
  */
 #define FLEXCAN_MB_REGS     FLEXCAN_MB_LEN / 4
 
+// FlexCAN Message Buffer fields
+#define FLEXCAN_MB_CTRL_DLC(x)      ((x >> 16) & 0xF)
+#define FLEXCAN_MB_CTRL_IDE(x)      ((x >> 21) & 0x1)
+#define FLEXCAN_MB_CTRL_CODE(x)     ((x >> 24) & 0xF)
+#define FLEXCAN_MB_CTRL_EDL(x)      ((x >> 31) & 0x1)
+#define FLEXCAN_MB_ID_STANDARD(x)   ((x >> 18) & 0x7FF)
+#define FLEXCAN_MB_ID_EXTENDED(x)   (x & 0x1FFFFFFF)
+
+// FlexCAN Message Buffer Code Rx
+#define FLEXCAN_MB_RX_CODE_INACTIVE     0x0
+#define FLEXCAN_MB_RX_CODE_EMPTY        0x4
+#define FLEXCAN_MB_RX_CODE_FULL         0x2
+
+// FlexCAN Message Buffer Code Tx
+#define FLEXCAN_MB_TX_CODE_INACTIVE     0x8
+#define FLEXCAN_MB_TX_CODE_ABORT        0x9
+#define FLEXCAN_MB_TX_CODE_DATA         0xC
+
+// FlexCAN Message Buffer Payload
+// message buffer size configurable in CAN FD mode via FDCTRL[MBDSR]
+#define FLEXCAN_MB_DATA_LEN_LEGACY      0x8
+
 // this is the size advertised in the device tree
 #define FLEXCAN_MMIO_SZ     0xA000
 
