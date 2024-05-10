@@ -40,13 +40,24 @@ OBJECT_DECLARE_SIMPLE_TYPE(FslFlexCanState, FSL_FLEXCAN)
 #define FLEXCAN_R_MAX       32
 
 // 32 * 4 bytes worth of register space starting at module base addr
-#define FLEXCAN_R_SZ        FLEXCAN_R_MAX * 4
+#define FLEXCAN_R_LEN       FLEXCAN_R_MAX * 4
 
 // 128 16 byte message buffers
-#define FLEXCAN_MB_SZ       128 * 16
+#define FLEXCAN_NUM_MB      128
+#define FLEXCAN_MB_SIZE     16
 
 // message buffer start offset
-#define FLEXCAN_MB_BASE     FLEXCAN_R_SZ
+#define FLEXCAN_MB_BASE     FLEXCAN_R_LEN
+
+// message buffer length
+#define FLEXCAN_MB_LEN      FLEXCAN_NUM_MB * FLEXCAN_MB_SIZE
+
+/*
+ * The message buffers on the FlexCAN are implemented using memory mapped
+ * embedded RAM and are not actually registers. Accesses and fields are
+ * 4 byte aligned, so it can be helpful to think of them as registers.
+ */
+#define FLEXCAN_MB_REGS     FLEXCAN_MB_LEN / 4
 
 // this is the size advertised in the device tree
 #define FLEXCAN_MMIO_SZ     0xA000
@@ -64,7 +75,7 @@ typedef struct FslFlexCanState {
     CanBusState         *canbus;
     uint32_t            regs[FLEXCAN_R_MAX];
     RegisterInfo        reg_info[FLEXCAN_R_MAX];
-    uint8_t             mb[FLEXCAN_MB_SZ];
+    uint32_t            mb[FLEXCAN_MB_REGS];
 } FslFlexCanState;
 
 #endif // HW_FLEXCAN_FSL_H
