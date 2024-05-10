@@ -254,14 +254,14 @@ static void flexcan_realize(DeviceState *dev, Error **errp)
                                       s->regs,
                                       &flexcan_reg_ops,
                                       NULL,
-                                      FLEXCAN_R_SZ);
+                                      FLEXCAN_R_LEN);
 
     // add mem region for registers to the top level memory region
     memory_region_add_subregion(&s->flexcan, 0x0, &reg_array->mem);
 
     // add mem region for message buffers to top level memory region
     memory_region_init_io(&s->mb_mem, OBJECT(s), &flexcan_mb_ops,
-                          s, "flexcan.mb", FLEXCAN_MB_SZ);
+                          s, "flexcan.mb", FLEXCAN_MB_LEN);
     memory_region_add_subregion(&s->flexcan, 0x80, &s->mb_mem);
 
     // init the top level memory region for mmio
