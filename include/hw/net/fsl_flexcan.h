@@ -60,12 +60,16 @@ OBJECT_DECLARE_SIMPLE_TYPE(FslFlexCanState, FSL_FLEXCAN)
 #define FLEXCAN_MB_REGS     FLEXCAN_MB_LEN / 4
 
 // FlexCAN Message Buffer fields
-#define FLEXCAN_MB_CTRL_DLC(x)      ((x >> 16) & 0xF)
-#define FLEXCAN_MB_CTRL_IDE(x)      ((x >> 21) & 0x1)
-#define FLEXCAN_MB_CTRL_CODE(x)     ((x >> 24) & 0xF)
-#define FLEXCAN_MB_CTRL_EDL(x)      ((x >> 31) & 0x1)
-#define FLEXCAN_MB_ID_STANDARD(x)   ((x >> 18) & 0x7FF)
-#define FLEXCAN_MB_ID_EXTENDED(x)   (x & 0x1FFFFFFF)
+#define FLEXCAN_MB_CTRL_DLC_R(x)        ((x >> 16) & 0xF)
+#define FLEXCAN_MB_CTRL_DLC_W(d,v)      (d | ((v & 0xF) << 16))
+#define FLEXCAN_MB_CTRL_IDE_R(x)        ((x >> 21) & 0x1)
+#define FLEXCAN_MB_CTRL_IDE_W(d,v)      (d | ((v & 0x1) << 21))
+#define FLEXCAN_MB_CTRL_CODE_R(x)       ((x >> 24) & 0xF)
+#define FLEXCAN_MB_CTRL_EDL_R(x)        ((x >> 31) & 0x1)
+#define FLEXCAN_MB_ID_STD_R(x)          ((x >> 18) & QEMU_CAN_SFF_MASK)
+#define FLEXCAN_MB_ID_STD_W(d,v)        (d | ((v & QEMU_CAN_SFF_MASK) << 18))
+#define FLEXCAN_MB_ID_EXT_R(x)          (x & QEMU_CAN_EFF_MASK)
+#define FLEXCAN_MB_ID_EXT_W(d,v)        (d | (v & QEMU_CAN_EFF_MASK))
 
 // FlexCAN Message Buffer Code Rx
 #define FLEXCAN_MB_RX_CODE_INACTIVE     0x0
