@@ -287,14 +287,59 @@ static ssize_t flexcan_receive(CanBusClientState *client,
                                const qemu_can_frame *buf,
                                size_t buf_size)
 {
-    // TODO
-    return 0;
+    // currently only support legacy Rx Fifo
+    // Legacy Rx FIFO occupies 0x80 to 0xDC, which is normally occupied by MB0-MB5
+    FslFlexCanState *s = container_of(client, FslFlexCanState, bus_client);
+    const qemu_can_frame *frame = buf;
+    int i;
+
+    if (buf_size <= 0) {
+        return 0;
+    }
+
+    // write length of data payload in bytes
+    s->mb[0] = 0;
+    s->mb[0] = FLEXCAN_MB_CTRL_DLC_W(s->mb[0], frame->can_dlc);
+
+    // write CAN ID and handle extended ID flag
+    s->mb[1] = 0;
+    if (frame->can_id & QEMU_CAN_EFF_FLAG) {
+        s->mb[0] = FLEXCAN_MB_CTRL_IDE_W(s->mb[0], 1);
+        s->mb[1] = FLEXCAN_MB_ID_EXT_W(s->mb[1], frame->can_id);
+    } else {
+        s->mb[1] = FLEXCAN_MB_ID_STD_W(s->mb[1], frame->can_id);
+    }
+
+    // zero payload buffer
+    memset(&s->mb[2], 0, frame->can_dlc); // first 2 double words are header
+
+    // set data payload registers according to received data
+    for (i = 0; i < frame->can_dlc; i++) {
+        s->mb[2 + (i / 4)] |= frame->data[i] << ((i % 4) * 8);
+    }
+
+    // set interrupt flag corresponding to legacy Rx FIFO
+    ARRAY_FIELD_DP32(s->regs, INTERRUPT_FLAGS_1_REGISTER, BUF5I, 1);
+
+    // raise interrupt
+    flexcan_update_irq(s);
+
+    return buf_size;
 }
 
 static bool flexcan_can_receive(CanBusClientState *client)
 {
-    // TODO
-    return false;
+    FslFlexCanState *s = container_of(client, FslFlexCanState, bus_client);
+
+    // currently only support Legacy Rx FIFO
+    if (!ARRAY_FIELD_EX32(s->regs, MODULE_CONFIGURATION_REGISTER, RFEN)) {
+        return false;
+    }
+
+    // if legacy Rx FIFO mode is enabled, the BUF5I flag indicates that there
+    // is a valid frame in the legacy Rx FIFO
+    // the flag is cleared by software once it consumes the buffer contents
+    return !ARRAY_FIELD_EX32(s->regs, INTERRUPT_FLAGS_1_REGISTER, BUF5I);
 }
 
 static CanBusClientInfo flexcan_bus_client_info = {
@@ -328,11 +373,12 @@ static void flexcan_mb_write(void *opaque, hwaddr offset,
     if (!(offset % FLEXCAN_MB_SIZE)) {
         // writing to MB control
         if (!ARRAY_FIELD_EX32(s->regs, MODULE_CONFIGURATION_REGISTER, FRZACK) &&
-            FLEXCAN_MB_CTRL_CODE(s->mb[mb_idx]) == FLEXCAN_MB_TX_CODE_DATA) {
-            frame.can_id = FLEXCAN_MB_CTRL_IDE(s->mb[mb_idx]) ?
-                                FLEXCAN_MB_ID_EXTENDED(s->mb[mb_idx + 1]) :
-                                FLEXCAN_MB_ID_STANDARD(s->mb[mb_idx + 1]);
-            frame.can_dlc = FLEXCAN_MB_CTRL_DLC(s->mb[mb_idx]);
+            FLEXCAN_MB_CTRL_CODE_R(s->mb[mb_idx]) == FLEXCAN_MB_TX_CODE_DATA) {
+            // set can ID and extended ID flag
+            frame.can_id = FLEXCAN_MB_CTRL_IDE_R(s->mb[mb_idx]) ?
+                            FLEXCAN_MB_ID_EXT_R(s->mb[mb_idx + 1]) | QEMU_CAN_EFF_FLAG :
+                            FLEXCAN_MB_ID_STD_R(s->mb[mb_idx + 1]);
+            frame.can_dlc = FLEXCAN_MB_CTRL_DLC_R(s->mb[mb_idx]);
             // extract the data bytes
             for (i = 0; i < FLEXCAN_MB_DATA_LEN_LEGACY; i++) {
                 frame.data[i] = (s->mb[mb_idx + (i/4) + 2] >> ((i % 4) * 8)) & 0xFF;
