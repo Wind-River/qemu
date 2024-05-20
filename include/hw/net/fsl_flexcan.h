@@ -37,20 +37,26 @@ OBJECT_DECLARE_SIMPLE_TYPE(FslFlexCanState, FSL_FLEXCAN)
  */
 
 // 32 4 byte wide registers
-#define FLEXCAN_R_MAX       32
+#define FLEXCAN_BASE_REGS       32
 
 // 32 * 4 bytes worth of register space starting at module base addr
-#define FLEXCAN_R_LEN       FLEXCAN_R_MAX * 4
+#define FLEXCAN_BASE_R_LEN      FLEXCAN_BASE_REGS * 4
 
 // 128 16 byte message buffers
-#define FLEXCAN_NUM_MB      128
-#define FLEXCAN_MB_SIZE     16
+#define FLEXCAN_NUM_MB          128
+#define FLEXCAN_MB_SIZE         16
 
 // message buffer start offset
-#define FLEXCAN_MB_BASE     FLEXCAN_R_LEN
+#define FLEXCAN_MB_BASE         FLEXCAN_BASE_R_LEN
 
 // message buffer length
-#define FLEXCAN_MB_LEN      FLEXCAN_NUM_MB * FLEXCAN_MB_SIZE
+#define FLEXCAN_MB_LEN          FLEXCAN_NUM_MB * FLEXCAN_MB_SIZE
+
+// offset of CAN FD registers
+#define FLEXCAN_FD_REG_OFF      0xC00
+
+// number of CAN FD registers
+#define FLEXCAN_FD_REGS         6
 
 /*
  * The message buffers on the FlexCAN are implemented using memory mapped
@@ -99,9 +105,11 @@ typedef struct FslFlexCanState {
     qemu_irq            irq_mb_8_127;
     CanBusClientState   bus_client;
     CanBusState         *canbus;
-    uint32_t            regs[FLEXCAN_R_MAX];
-    RegisterInfo        reg_info[FLEXCAN_R_MAX];
+    uint32_t            regs[FLEXCAN_BASE_REGS];
+    RegisterInfo        reg_info[FLEXCAN_BASE_REGS];
     uint32_t            mb[FLEXCAN_MB_REGS];
+    uint32_t            fd_regs[FLEXCAN_FD_REGS];
+    RegisterInfo        fd_reg_info[FLEXCAN_FD_REGS];
 } FslFlexCanState;
 
 #endif // HW_FLEXCAN_FSL_H
