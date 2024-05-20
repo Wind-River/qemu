@@ -463,7 +463,7 @@ static void flexcan_realize(DeviceState *dev, Error **errp)
                                       s->regs,
                                       &flexcan_reg_ops,
                                       NULL,
-                                      FLEXCAN_R_LEN);
+                                      FLEXCAN_BASE_R_LEN);
 
     // add mem region for registers to the top level memory region
     memory_region_add_subregion(&s->flexcan, 0x0, &reg_array->mem);
@@ -510,7 +510,9 @@ static const VMStateDescription vmstate_flexcan = {
     .version_id = 1,
     .minimum_version_id = 1,
     .fields = (VMStateField[]) {
-        VMSTATE_UINT32_ARRAY(regs, FslFlexCanState, FLEXCAN_R_MAX),
+        VMSTATE_UINT32_ARRAY(regs, FslFlexCanState, FLEXCAN_BASE_REGS),
+        VMSTATE_UINT32_ARRAY(mb, FslFlexCanState, FLEXCAN_MB_REGS),
+        VMSTATE_UINT32_ARRAY(fd_regs, FslFlexCanState, FLEXCAN_FD_REGS),
         VMSTATE_END_OF_LIST(),
     }
 };
