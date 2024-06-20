@@ -721,3 +721,12 @@ config NXP_S32G
     select PL011
     select VIRTIO_MMIO
     select UNIMP
+
+config WR_ARM
+    bool
+    default y
+    depends on TCG && AARCH64
+    select ARM_GIC
+    select PL011
+    select VIRTIO_MMIO
+    select UNIMP
