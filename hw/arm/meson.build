@@ -64,6 +64,7 @@ arm_ss.add(when: 'CONFIG_XEN', if_true: files(
   'xen-pvh.c',
 ))
 arm_ss.add(when: 'CONFIG_NXP_S32G', if_true: files('nxp-s32g.c'))
+arm_ss.add(when: 'CONFIG_WR_ARM', if_true: files('wr-arm.c'))
 
 system_ss.add(when: 'CONFIG_ARM_SMMUV3', if_true: files('smmu-common.c'))
 system_ss.add(when: 'CONFIG_COLLIE', if_true: files('collie.c'))
