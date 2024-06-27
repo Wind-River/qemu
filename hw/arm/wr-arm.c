@@ -30,6 +30,84 @@
 
 #include "hw/arm/wr-arm.h"
 
+static void wr_arm_create_cpus(MachineState *machine)
+{
+    int i;
+    WrArmMachineState *s = WR_ARM_MACHINE(machine);
+
+    /* realize the cpu cluster and cpus */
+    object_initialize_child(OBJECT(s), "cpu-cluster", &s->cpu_cluster,
+                            TYPE_CPU_CLUSTER);
+
+    qdev_prop_set_uint32(DEVICE(&s->cpu_cluster), "cluster-id", 0);
+    for (i = 0; i < machine->smp.cpus; i++) {
+        Object *obj;
+
+        object_initialize_child(OBJECT(&s->cpu_cluster), "cpu[*]",
+                                &s->cpus[i],
+                                ARM_CPU_TYPE_NAME("cortex-a53"));
+        obj = OBJECT(&s->cpus[i]);
+        if (i) {
+            /* start APs in powered down state */
+            object_property_set_bool(obj, "start-powered-off", true,
+                                     &error_abort);
+        }
+
+        if (!s->secure) {
+            object_property_set_bool(obj, "has_el3", false, NULL);
+        }
+
+        if (!s->virt && object_property_find(obj, "has_el2")) {
+            object_property_set_bool(obj, "has_el2", false, NULL);
+        }
+
+        object_property_set_int(obj, "core-count", 1, &error_abort); //TODO
+        object_property_set_link(obj, "memory", OBJECT(s->mr),
+                                 &error_abort);
+        qdev_realize(DEVICE(obj), NULL, &error_fatal);
+    }
+
+    qdev_realize(DEVICE(&s->cpu_cluster), NULL, &error_fatal);
+
+    /* add FDT nodes for CPUs in reverse order */
+    qemu_fdt_add_subnode(machine->fdt, "/cpus");
+    qemu_fdt_setprop_cell(machine->fdt, "/cpus", "#size-cells", 0x0);
+    qemu_fdt_setprop_cell(machine->fdt, "/cpus", "#address-cells", 1);
+
+    for (i = machine->smp.cpus - 1; i >= 0; i--) {
+        char *name = g_strdup_printf("/cpus/cpu%d", i);
+        ARMCPU *armcpu = ARM_CPU(qemu_get_cpu(i));
+
+        qemu_fdt_add_subnode(machine->fdt, name);
+        qemu_fdt_setprop_cell(machine->fdt, name, "reg", armcpu->mp_affinity);
+        if (s->psci_conduit != QEMU_PSCI_CONDUIT_DISABLED) {
+            qemu_fdt_setprop_string(machine->fdt, name, "enable-method", "psci");
+        }
+        qemu_fdt_setprop_string(machine->fdt, name, "device_type", "cpu");
+        qemu_fdt_setprop_string(machine->fdt, name, "compatible", armcpu->dtb_compatible);
+    }
+}
+
+static void fdt_create(MachineState *machine)
+{
+    MachineClass *mc = MACHINE_GET_CLASS(machine);
+    WrArmMachineState *s = WR_ARM_MACHINE(machine);
+    void *fdt;
+
+    fdt = create_device_tree(&s->fdt_size);
+    if (!fdt) {
+        error_report("create_device_tree() failed");
+        exit(1);
+    }
+
+    qemu_fdt_setprop_cell(fdt, "/", "#size-cells", 0x2);
+    qemu_fdt_setprop_cell(fdt, "/", "#address-cells", 0x2);
+    qemu_fdt_setprop_string(fdt, "/", "model", mc->desc);
+    qemu_fdt_setprop_string(fdt, "/", "compatible", WR_ARM_COMPATIBLE);
+    qemu_fdt_add_subnode(fdt, "/chosen");
+
+    machine->fdt = fdt;
+}
 
 static void wr_arm_init(MachineState *machine)
 {
@@ -37,6 +115,14 @@ static void wr_arm_init(MachineState *machine)
 
     s->psci_conduit = QEMU_PSCI_CONDUIT_SMC;
     s->mr = get_system_memory();
+
+    fdt_create(machine);
+
+    wr_arm_create_cpus(machine);
+
+    memory_region_add_subregion(s->mr, WR_PHYSMEM_BASE, machine->ram);
+
+    s->binfo.ram_size = machine->ram_size;
 }
 
 static void wr_arm_machine_instance_init(Object *obj)
