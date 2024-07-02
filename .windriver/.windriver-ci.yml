@@ -1,0 +1,46 @@
+# Wind River Rhone Team CICD pipeline configuration file. Used for QEMU build and test.
+
+stages:
+  - build-test
+
+# Default job values
+default:
+  retry: 0
+  interruptible: true
+  image:
+    name: registry.hub.docker.com/library/debian:11.7
+    entrypoint: [""]
+
+# Control when the pipeline is ran (on git push, for updates to merge request, etc)
+workflow:
+  rules:
+    # Do not run for merge requests (will duplicate the push pipeline)
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: never
+    # catchall to always run the pipeline if the above conditions fail
+    - when: always
+
+build-test-qemu-runtime:
+  stage: build-test
+  script:
+    - apt-get update
+    - apt-get upgrade -y && apt-get install -y autoconf automake bison bzip2 ca-certificates chrpath cmake curl
+                diffstat flex g++ gawk gcc help2man lftp libelf1 libglib2.0-dev libpixman-1-dev
+                libslirp-dev libx11-6 libxext6 libxpm4 libz-dev make ninja-build python3
+                python3-pip screen texinfo unzip vsftpd wget git
+    - pip3 install -U pip setuptools
+    # build QEMU
+    - ./configure
+        --extra-cflags='-mno-avx512f'
+        --extra-cxxflags='-mno-avx512f'
+        --enable-strip
+        --enable-slirp
+        --disable-gio
+        --disable-debug-info
+        --disable-qom-cast-debug
+    - make -j $(cat /proc/cpuinfo | grep "^processor" | wc -l)
+    # run unit test
+    - make check-unit
+    # run block level test
+    - make check-block
+ 
