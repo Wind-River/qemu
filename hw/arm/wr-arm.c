@@ -30,6 +30,48 @@
 
 #include "hw/arm/wr-arm.h"
 
+/* Create the system timer for the machine.
+ * Since this is an arm system, we assume the use
+ * of the arm generic timer to implement the system
+ * timer.
+ *
+ * Create the device tree node for the timer. We do
+ * not need to create any devices here.
+ */
+static void wr_arm_create_timer(MachineState *machine)
+{
+    const char compat[] = "arm,armv8-timer";
+
+    qemu_fdt_add_subnode(machine->fdt, "/timer");
+    qemu_fdt_setprop(machine->fdt, "/timer", "compatible", compat, sizeof(compat));
+    qemu_fdt_setprop_cells(machine->fdt, "/timer", "interrupts",
+        GIC_FDT_IRQ_TYPE_PPI, WR_TIMER_S_EL1_IRQ, GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        GIC_FDT_IRQ_TYPE_PPI, WR_TIMER_NS_EL1_IRQ, GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        GIC_FDT_IRQ_TYPE_PPI, WR_TIMER_VIRT_IRQ, GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        GIC_FDT_IRQ_TYPE_PPI, WR_TIMER_NS_EL2_IRQ, GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+}
+
+/*
+ * Create the peripheral clock for the machine.
+ * We do not actually emulate the clock input to
+ * peripheral devices, so we don't realize any new
+ * devices here.
+ *
+ * Create the device tree node for the clock and allocate
+ * and store the phandle so we can reference it later.
+ */
+static void wr_arm_create_clock(MachineState *machine)
+{
+    WrArmMachineState *s = WR_ARM_MACHINE(machine);
+
+    s->clock_phandle = qemu_fdt_alloc_phandle(machine->fdt);
+    qemu_fdt_add_subnode(machine->fdt, "/clk");
+    qemu_fdt_setprop_string(machine->fdt, "/clk", "compatible", "fixed-clock");
+    qemu_fdt_setprop_cell(machine->fdt, "/clk", "#clock-cells", 0x0);
+    qemu_fdt_setprop_cell(machine->fdt, "/clk", "clock-frequency", 24000000);
+    qemu_fdt_setprop_cell(machine->fdt, "/clk", "phandle", s->clock_phandle);
+}
+
 static void wr_arm_create_cpus(MachineState *machine)
 {
     int i;
@@ -40,6 +82,8 @@ static void wr_arm_create_cpus(MachineState *machine)
                             TYPE_CPU_CLUSTER);
 
     qdev_prop_set_uint32(DEVICE(&s->cpu_cluster), "cluster-id", 0);
+
+    /* create CPUs in forward order */
     for (i = 0; i < machine->smp.cpus; i++) {
         Object *obj;
 
@@ -88,6 +132,9 @@ static void wr_arm_create_cpus(MachineState *machine)
     }
 }
 
+/*
+ * Create a device tree for this machine
+ */
 static void fdt_create(MachineState *machine)
 {
     MachineClass *mc = MACHINE_GET_CLASS(machine);
