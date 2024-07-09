@@ -30,6 +30,47 @@
 
 #include "hw/arm/wr-arm.h"
 
+static void wr_arm_create_uart(MachineState *machine)
+{
+    DeviceState *dev;
+    MemoryRegion *mr;
+    char *name = g_strdup_printf("uart0");
+    char *nodename = g_strdup_printf("/uart0");
+    const char compat[] = "arm,pl011\0arm,sbsa-uart";
+    WrArmMachineState *s = WR_ARM_MACHINE(machine);
+
+    /* realize the PL011 uart device */
+    object_initialize_child(OBJECT(s), name, &s->uart,
+                            TYPE_PL011);
+    dev = DEVICE(&s->uart);
+    qdev_prop_set_chr(dev, "chardev", serial_hd(0));
+    sysbus_realize(SYS_BUS_DEVICE(dev), &error_fatal);
+
+    mr = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 0);
+    memory_region_add_subregion(s->mr, MM_UART0, mr);
+
+    sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, s->irqmap[WR_UART0_IRQ_0]);
+
+    /* add device tree nodes for uart */
+    qemu_fdt_add_subnode(machine->fdt, nodename);
+    qemu_fdt_setprop_cell(machine->fdt, nodename, "current-speed", 115200);
+    qemu_fdt_setprop_cells(machine->fdt, nodename, "clocks",
+                           s->clock_phandle, s->clock_phandle);
+    qemu_fdt_setprop(machine->fdt, nodename, "compatible", compat, sizeof(compat));
+    qemu_fdt_setprop_cells(machine->fdt, nodename, "interrupts",
+                           GIC_FDT_IRQ_TYPE_SPI,
+                           WR_UART0_IRQ_0,
+                           GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+    qemu_fdt_setprop_sized_cells(machine->fdt, nodename, "reg", 2,
+                                 MM_UART0, 2, 0x1000);
+    qemu_fdt_setprop(machine->fdt, nodename, "u-boot,dm-pre-reloc", NULL, 0);
+
+    /* Set uart0 as the default stdout device */
+    qemu_fdt_setprop_string(machine->fdt, "/chosen", "stdout-path", nodename);
+    g_free(name);
+    g_free(nodename);
+}
+
 /* Create the system timer for the machine.
  * Since this is an arm system, we assume the use
  * of the arm generic timer to implement the system
@@ -171,6 +212,7 @@ static void wr_arm_init(MachineState *machine)
 
     s->binfo.ram_size = machine->ram_size;
 }
+    wr_arm_create_uart(machine);
 
 static void wr_arm_machine_instance_init(Object *obj)
 {
