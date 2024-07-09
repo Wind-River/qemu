@@ -39,7 +39,6 @@
 #define MM_GIC_REDIST           0x50900000
 #define MM_GIC_REDIST_SIZE      0x200000
 #define MM_UART0                0x401c8000
-#define MM_UART1                0x401cc000
 #define MM_VIRTIO_BASE          0x0a000000
 #define MM_VIRTIO_SIZE          0x200
 
