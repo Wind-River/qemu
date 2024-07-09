@@ -113,6 +113,125 @@ static void wr_arm_create_clock(MachineState *machine)
     qemu_fdt_setprop_cell(machine->fdt, "/clk", "phandle", s->clock_phandle);
 }
 
+static void fdt_add_gic_nodes(WrArmMachineState *s)
+{
+    MachineState *ms = MACHINE(s);
+    char *nodename;
+
+    nodename = g_strdup_printf("/gic@%x", MM_GIC_DIST);
+
+    s->gic_phandle = qemu_fdt_alloc_phandle(ms->fdt);
+
+    // set top-level interrupt-parent to gic phandle
+    qemu_fdt_setprop_cell(ms->fdt, "/", "interrupt-parent", s->gic_phandle);
+
+    qemu_fdt_add_subnode(ms->fdt, nodename);
+    qemu_fdt_setprop_cells(ms->fdt, nodename, "interrupts",
+                           GIC_FDT_IRQ_TYPE_PPI,
+                           INTID_TO_PPI(ARCH_GIC_MAINT_IRQ),
+                           GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+    qemu_fdt_setprop(ms->fdt, nodename, "interrupt-controller", NULL, 0);
+    qemu_fdt_setprop_cell(ms->fdt, nodename, "#interrupt-cells", 3);
+    qemu_fdt_setprop_string(ms->fdt, nodename, "compatible", "arm,gic-v3");
+    qemu_fdt_setprop_sized_cells(ms->fdt, nodename, "reg",
+                                 2, MM_GIC_DIST,
+                                 2, MM_GIC_DIST_SIZE,
+                                 2, MM_GIC_REDIST,
+                                 2, MM_GIC_REDIST_SIZE);
+    qemu_fdt_setprop_cell(ms->fdt, nodename, "phandle", s->gic_phandle);
+
+    g_free(nodename);
+}
+
+static inline int arm_gic_ppi_index(int cpu_nr, int ppi_index)
+{
+    return WR_NUM_IRQ + GIC_NR_SGIS + cpu_nr * GIC_INTERNAL + ppi_index;
+}
+
+static void wr_arm_create_gic(MachineState *machine)
+{
+    static const uint64_t addrs[] = {
+        MM_GIC_DIST,
+        MM_GIC_REDIST
+    };
+    SysBusDevice *gicbusdev;
+    DeviceState *gicdev;
+    uint32_t redist0_cap, redist0_cnt;
+    int i;
+    QList *redist_region_count;
+    WrArmMachineState *s = WR_ARM_MACHINE(machine);
+    int nr_cpus = machine->smp.cpus;
+
+    object_initialize_child(OBJECT(s), "gic", &s->gic,
+                            gicv3_class_name());
+    gicbusdev = SYS_BUS_DEVICE(&s->gic);
+    gicdev = DEVICE(&s->gic);
+    qdev_prop_set_uint32(gicdev, "revision", 3);
+    qdev_prop_set_uint32(gicdev, "num-cpu", nr_cpus);
+    // Always GIC_INTERNAL (32) internal interrupts
+    qdev_prop_set_uint32(gicdev, "num-irq", WR_NUM_IRQ + GIC_INTERNAL);
+
+    /*
+     * GICv3 has two 64KB frames per CPU
+     * Divide the gic redist size by 0x20000 to see how many
+     * redist regions we should advertise.
+     */
+    redist0_cap = MM_GIC_REDIST_SIZE / GICV3_REDIST_SIZE;
+    redist0_cnt = MIN(nr_cpus, redist0_cap);
+    redist_region_count = qlist_new();
+    qlist_append_int(redist_region_count, redist0_cnt);
+    qdev_prop_set_array(gicdev, "redist-region-count", redist_region_count);
+
+    qdev_prop_set_bit(gicdev, "has-security-extensions", true);
+
+    sysbus_realize(SYS_BUS_DEVICE(&s->gic), &error_fatal);
+
+    for (i = 0; i < ARRAY_SIZE(addrs); i++) {
+        MemoryRegion *mr;
+
+        mr = sysbus_mmio_get_region(gicbusdev, i);
+        memory_region_add_subregion(s->mr, addrs[i], mr);
+    }
+
+    for (i = 0; i < nr_cpus; i++) {
+        DeviceState *cpudev = DEVICE(&s->cpus[i]);
+        qemu_irq maint_irq;
+
+        /* Map the output timer irq lines from the CPU to the
+         * GIC PPI inputs.
+         */
+        qdev_connect_gpio_out(cpudev, GTIMER_PHYS,
+                              qdev_get_gpio_in(gicdev,
+                                               arm_gic_ppi_index(i, WR_TIMER_NS_EL1_IRQ)));
+        qdev_connect_gpio_out(cpudev, GTIMER_VIRT,
+                              qdev_get_gpio_in(gicdev,
+                                               arm_gic_ppi_index(i, WR_TIMER_VIRT_IRQ)));
+        qdev_connect_gpio_out(cpudev, GTIMER_HYP,
+                              qdev_get_gpio_in(gicdev,
+                                               arm_gic_ppi_index(i, WR_TIMER_NS_EL2_IRQ)));
+        qdev_connect_gpio_out(cpudev, GTIMER_SEC,
+                              qdev_get_gpio_in(gicdev,
+                                               arm_gic_ppi_index(i, WR_TIMER_S_EL1_IRQ)));
+        maint_irq = qdev_get_gpio_in(gicdev,
+                                     arm_gic_ppi_index(i, WR_GIC_MAINT_IRQ));
+        qdev_connect_gpio_out_named(cpudev, "gicv3-maintenance-interrupt",
+                                    0, maint_irq);
+        sysbus_connect_irq(gicbusdev, i, qdev_get_gpio_in(cpudev, ARM_CPU_IRQ));
+        sysbus_connect_irq(gicbusdev, i + nr_cpus,
+                           qdev_get_gpio_in(cpudev, ARM_CPU_FIQ));
+        sysbus_connect_irq(gicbusdev, i + 2 * nr_cpus,
+                           qdev_get_gpio_in(cpudev, ARM_CPU_VIRQ));
+        sysbus_connect_irq(gicbusdev, i + 3 * nr_cpus,
+                           qdev_get_gpio_in(cpudev, ARM_CPU_VFIQ));
+    }
+
+    for (i = 0; i < WR_NUM_IRQ; i++) {
+        s->irqmap[i] = qdev_get_gpio_in(gicdev, i);
+    }
+
+    fdt_add_gic_nodes(s);
+}
+
 static void wr_arm_create_cpus(MachineState *machine)
 {
     int i;
@@ -207,6 +326,8 @@ static void wr_arm_init(MachineState *machine)
     fdt_create(machine);
 
     wr_arm_create_cpus(machine);
+
+    wr_arm_create_gic(machine);
 
     wr_arm_create_timer(machine);
 
