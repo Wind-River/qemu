@@ -160,7 +160,7 @@ static void wr_arm_create_cpus(MachineState *machine)
     qemu_fdt_setprop_cell(machine->fdt, "/cpus", "#address-cells", 1);
 
     for (i = machine->smp.cpus - 1; i >= 0; i--) {
-        char *name = g_strdup_printf("/cpus/cpu%d", i);
+        char *name = g_strdup_printf("/cpus/cpu@%d", i);
         ARMCPU *armcpu = ARM_CPU(qemu_get_cpu(i));
 
         qemu_fdt_add_subnode(machine->fdt, name);
@@ -208,10 +208,14 @@ static void wr_arm_init(MachineState *machine)
 
     wr_arm_create_cpus(machine);
 
+    wr_arm_create_timer(machine);
+
     memory_region_add_subregion(s->mr, WR_PHYSMEM_BASE, machine->ram);
 
     s->binfo.ram_size = machine->ram_size;
 }
+    wr_arm_create_clock(machine);
+
     wr_arm_create_uart(machine);
 
 static void wr_arm_machine_instance_init(Object *obj)
