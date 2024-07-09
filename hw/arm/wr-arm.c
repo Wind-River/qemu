@@ -30,6 +30,14 @@
 
 #include "hw/arm/wr-arm.h"
 
+static void *wr_arm_get_dtb(const struct arm_boot_info *binfo)
+{
+    const WrArmMachineState *s = container_of(binfo, WrArmMachineState, binfo);
+    MachineState *ms = MACHINE(s);
+
+    return ms->fdt;
+}
+
 static void wr_arm_create_uart(MachineState *machine)
 {
     DeviceState *dev;
@@ -257,15 +265,12 @@ static void wr_arm_create_cpus(MachineState *machine)
                                      &error_abort);
         }
 
-        if (!s->secure) {
-            object_property_set_bool(obj, "has_el3", false, NULL);
-        }
+        object_property_set_bool(obj, "has_el3", false, NULL);
 
-        if (!s->virt && object_property_find(obj, "has_el2")) {
+        if (object_property_find(obj, "has_el2")) {
             object_property_set_bool(obj, "has_el2", false, NULL);
         }
 
-        object_property_set_int(obj, "core-count", 1, &error_abort); //TODO
         object_property_set_link(obj, "memory", OBJECT(s->mr),
                                  &error_abort);
         qdev_realize(DEVICE(obj), NULL, &error_fatal);
@@ -284,9 +289,7 @@ static void wr_arm_create_cpus(MachineState *machine)
 
         qemu_fdt_add_subnode(machine->fdt, name);
         qemu_fdt_setprop_cell(machine->fdt, name, "reg", armcpu->mp_affinity);
-        if (s->psci_conduit != QEMU_PSCI_CONDUIT_DISABLED) {
-            qemu_fdt_setprop_string(machine->fdt, name, "enable-method", "psci");
-        }
+        qemu_fdt_setprop_string(machine->fdt, name, "enable-method", "psci");
         qemu_fdt_setprop_string(machine->fdt, name, "device_type", "cpu");
         qemu_fdt_setprop_string(machine->fdt, name, "compatible", armcpu->dtb_compatible);
     }
@@ -320,7 +323,6 @@ static void wr_arm_init(MachineState *machine)
 {
     WrArmMachineState *s = WR_ARM_MACHINE(machine);
 
-    s->psci_conduit = QEMU_PSCI_CONDUIT_SMC;
     s->mr = get_system_memory();
 
     fdt_create(machine);
@@ -333,18 +335,16 @@ static void wr_arm_init(MachineState *machine)
 
     memory_region_add_subregion(s->mr, WR_PHYSMEM_BASE, machine->ram);
 
-    s->binfo.ram_size = machine->ram_size;
-}
     wr_arm_create_clock(machine);
 
     wr_arm_create_uart(machine);
 
-static void wr_arm_machine_instance_init(Object *obj)
-{
-    WrArmMachineState *s = WR_ARM_MACHINE(obj);
+    s->binfo.ram_size = machine->ram_size;
+    s->binfo.loader_start = WR_PHYSMEM_BASE;
+    s->binfo.get_dtb = wr_arm_get_dtb;
+    s->binfo.psci_conduit = QEMU_PSCI_CONDUIT_SMC;
 
-    s->secure = false;
-    s->virt = false;
+    arm_load_kernel(&s->cpus[0], machine, &s->binfo);
 }
 
 static void wr_arm_machine_class_init(ObjectClass *oc, void *data)
@@ -365,7 +365,6 @@ static const TypeInfo wr_arm_machine_info = {
     .parent = TYPE_MACHINE,
     .instance_size = sizeof(WrArmMachineState),
     .class_init = wr_arm_machine_class_init,
-    .instance_init = wr_arm_machine_instance_init,
 };
 
 static void wr_arm_machine_init(void)
