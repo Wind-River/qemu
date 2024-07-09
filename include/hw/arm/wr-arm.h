@@ -69,10 +69,6 @@ struct WrArmMachineState {
     int fdt_size;
     uint32_t clock_phandle;
     uint32_t gic_phandle;
-    int psci_conduit; // HVC
-
-    bool secure; // disabled
-    bool virt; // disabled
 };
 
 #endif /* QEMU_WR_ARM_H */
