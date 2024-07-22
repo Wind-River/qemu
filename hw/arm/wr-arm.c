@@ -55,7 +55,7 @@ static void wr_arm_create_uart(MachineState *machine)
     sysbus_realize(SYS_BUS_DEVICE(dev), &error_fatal);
 
     mr = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 0);
-    memory_region_add_subregion(s->mr, MM_UART0, mr);
+    memory_region_add_subregion(s->mr, wr_memmap[WR_UART0].base, mr);
 
     sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, s->irqmap[WR_UART0_IRQ_0]);
 
@@ -70,7 +70,7 @@ static void wr_arm_create_uart(MachineState *machine)
                            WR_UART0_IRQ_0,
                            GIC_FDT_IRQ_FLAGS_LEVEL_HI);
     qemu_fdt_setprop_sized_cells(machine->fdt, nodename, "reg", 2,
-                                 MM_UART0, 2, 0x1000);
+                                 wr_memmap[WR_UART0].base, 2, 0x1000);
     qemu_fdt_setprop(machine->fdt, nodename, "u-boot,dm-pre-reloc", NULL, 0);
 
     /* Set uart0 as the default stdout device */
@@ -126,7 +126,7 @@ static void fdt_add_gic_nodes(WrArmMachineState *s)
     MachineState *ms = MACHINE(s);
     char *nodename;
 
-    nodename = g_strdup_printf("/gic@%x", MM_GIC_DIST);
+    nodename = g_strdup_printf("/gic@%lx", wr_memmap[WR_GIC_DIST].base);
 
     s->gic_phandle = qemu_fdt_alloc_phandle(ms->fdt);
 
@@ -142,10 +142,10 @@ static void fdt_add_gic_nodes(WrArmMachineState *s)
     qemu_fdt_setprop_cell(ms->fdt, nodename, "#interrupt-cells", 3);
     qemu_fdt_setprop_string(ms->fdt, nodename, "compatible", "arm,gic-v3");
     qemu_fdt_setprop_sized_cells(ms->fdt, nodename, "reg",
-                                 2, MM_GIC_DIST,
-                                 2, MM_GIC_DIST_SIZE,
-                                 2, MM_GIC_REDIST,
-                                 2, MM_GIC_REDIST_SIZE);
+                                 2, wr_memmap[WR_GIC_DIST].base,
+                                 2, wr_memmap[WR_GIC_DIST].size,
+                                 2, wr_memmap[WR_GIC_REDIST].base,
+                                 2, wr_memmap[WR_GIC_REDIST].size);
     qemu_fdt_setprop_cell(ms->fdt, nodename, "phandle", s->gic_phandle);
 
     g_free(nodename);
@@ -159,8 +159,8 @@ static inline int arm_gic_ppi_index(int cpu_nr, int ppi_index)
 static void wr_arm_create_gic(MachineState *machine)
 {
     static const uint64_t addrs[] = {
-        MM_GIC_DIST,
-        MM_GIC_REDIST
+        wr_memmap[WR_GIC_DIST].base,
+        wr_memmap[WR_GIC_REDIST].base
     };
     SysBusDevice *gicbusdev;
     DeviceState *gicdev;
@@ -184,7 +184,7 @@ static void wr_arm_create_gic(MachineState *machine)
      * Divide the gic redist size by 0x20000 to see how many
      * redist regions we should advertise.
      */
-    redist0_cap = MM_GIC_REDIST_SIZE / GICV3_REDIST_SIZE;
+    redist0_cap = wr_memmap[WR_GIC_REDIST].size / GICV3_REDIST_SIZE;
     redist0_cnt = MIN(nr_cpus, redist0_cap);
     redist_region_count = qlist_new();
     qlist_append_int(redist_region_count, redist0_cnt);
