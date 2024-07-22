@@ -51,11 +51,6 @@
 /* Memory Map Constants */
 #define WR_PHYSMEM_BASE         0x80000000
 
-#define MM_GIC_DIST             0x50800000
-#define MM_GIC_DIST_SIZE        0x10000
-#define MM_GIC_REDIST           0x50900000
-#define MM_GIC_REDIST_SIZE      0x200000
-#define MM_UART0                0x401c8000
 #define MM_VIRTIO_BASE          0x0a000000
 #define MM_VIRTIO_SIZE          0x200
 
@@ -66,9 +61,6 @@
 #define NUM_VIRTIO_TRANSPORTS   4
 #define WR_VIRTIO_IRQ_BASE      0x68
 
-#define TYPE_WR_ARM_MACHINE     MACHINE_TYPE_NAME("wr-arm")
-
-OBJECT_DECLARE_SIMPLE_TYPE(WrArmMachineState, WR_ARM_MACHINE)
 
 struct WrArmMachineState {
     MachineState parent_obj;
@@ -87,5 +79,25 @@ struct WrArmMachineState {
     uint32_t clock_phandle;
     uint32_t gic_phandle;
 };
+
+#define TYPE_WR_ARM_MACHINE     MACHINE_TYPE_NAME("wr-arm")
+OBJECT_DECLARE_SIMPLE_TYPE(WrArmMachineState, WR_ARM_MACHINE)
+
+enum {
+    WR_LOW_MEM,
+    WR_UART0,
+    WR_GIC_DIST,
+    WR_GIC_REDIST,
+    WR_HIGH_MEM,
+};
+
+static const MemMapEntry wr_memmap[] = {
+    [WR_LOW_MEM] =          { 0x00000000, 0x00000000 },
+    [WR_UART0] =            { 0x401c8000, 0x00001000 },
+    [WR_GIC_DIST] =         { 0x50800000, 0x00010000 },
+    [WR_GIC_REDIST] =       { 0x50900000, 0x00200000 },
+    [WR_HIGH_MEM] =         { 0x80000000, 0x80000000 }
+};
+
 
 #endif /* QEMU_WR_ARM_H */
