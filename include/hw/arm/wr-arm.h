@@ -92,11 +92,11 @@ enum {
 };
 
 static const MemMapEntry wr_memmap[] = {
-    [WR_LOW_MEM] =          { 0x00000000, 0x00000000 },
     [WR_UART0] =            { 0x401c8000, 0x00001000 },
     [WR_GIC_DIST] =         { 0x50800000, 0x00010000 },
     [WR_GIC_REDIST] =       { 0x50900000, 0x00200000 },
-    [WR_HIGH_MEM] =         { 0x80000000, 0x80000000 }
+    [WR_LOW_MEM] =          { 0x80000000, 0x80000000 },
+    [WR_HIGH_MEM] =         { 0x100000000, 0x0 }
 };
 
 
