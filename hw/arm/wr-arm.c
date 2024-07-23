@@ -55,7 +55,7 @@ static void wr_arm_create_uart(MachineState *machine)
     sysbus_realize(SYS_BUS_DEVICE(dev), &error_fatal);
 
     mr = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 0);
-    memory_region_add_subregion(s->mr, wr_memmap[WR_UART0].base, mr);
+    memory_region_add_subregion(get_system_memory(), wr_memmap[WR_UART0].base, mr);
 
     sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, s->irqmap[WR_UART0_IRQ_0]);
 
@@ -198,7 +198,7 @@ static void wr_arm_create_gic(MachineState *machine)
         MemoryRegion *mr;
 
         mr = sysbus_mmio_get_region(gicbusdev, i);
-        memory_region_add_subregion(s->mr, addrs[i], mr);
+        memory_region_add_subregion(get_system_memory(), addrs[i], mr);
     }
 
     for (i = 0; i < nr_cpus; i++) {
@@ -271,7 +271,7 @@ static void wr_arm_create_cpus(MachineState *machine)
             object_property_set_bool(obj, "has_el2", false, NULL);
         }
 
-        object_property_set_link(obj, "memory", OBJECT(s->mr),
+        object_property_set_link(obj, "memory", OBJECT(get_system_memory()),
                                  &error_abort);
         qdev_realize(DEVICE(obj), NULL, &error_fatal);
     }
@@ -323,7 +323,16 @@ static void wr_arm_init(MachineState *machine)
 {
     WrArmMachineState *s = WR_ARM_MACHINE(machine);
 
-    s->mr = get_system_memory();
+    if (memory_region_size(machine->ram) > wr_memmap[WR_LO_MEM].size) {
+        memory_region_init_alias(&s->mem_hi, OBJECT(machine), "ddr-ram-hi",
+                                 machine->ram, wr_memmap[WR_LO_MEM].size,
+                                 wr_memmap[WR_HI_MEM].size);
+        memory_region_add_subregion(get_system_memory(), wr_memmap[WR_HI_MEM].base, &s->mem_hi);
+    }
+
+    memory_region_init_alias(&s->mem_lo, OBJECT(machine), "ddr-ram-low",
+                             machine->ram, 0, wr_memmap[WR_LO_MEM].size);
+    memory_region_add_subregion(get_system_memory(), wr_memmap[WR_LO_MEM].base, &s->mem_lo);
 
     fdt_create(machine);
 
@@ -333,14 +342,16 @@ static void wr_arm_init(MachineState *machine)
 
     wr_arm_create_timer(machine);
 
-    memory_region_add_subregion(s->mr, WR_PHYSMEM_BASE, machine->ram);
-
     wr_arm_create_clock(machine);
 
     wr_arm_create_uart(machine);
 
     s->binfo.ram_size = machine->ram_size;
-    s->binfo.loader_start = WR_PHYSMEM_BASE;
+    if (wr_memmap[WR_LO_MEM].size) {
+        s->binfo.loader_start = wr_memmap[WR_LO_MEM].base;
+    } else {
+        s->binfo.loader_start = wr_memmap[WR_HI_MEM].base;
+    }
     s->binfo.get_dtb = wr_arm_get_dtb;
     s->binfo.psci_conduit = QEMU_PSCI_CONDUIT_SMC;
 
