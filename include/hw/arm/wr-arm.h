@@ -32,7 +32,6 @@
 
 #define WR_ARM_COMPATIBLE   "nxp,s32g3"
 
-#define WR_MIN_ACPUS        4
 #define WR_MAX_ACPUS        8
 
 #define WR_CORES_PER_CPU    1
@@ -47,12 +46,6 @@
 #define WR_TIMER_HYP_VIRT_IRQ   12
 #define WR_TIMER_S_EL1_IRQ      13
 #define WR_TIMER_NS_EL1_IRQ     14
-
-/* Memory Map Constants */
-#define WR_PHYSMEM_BASE         0x80000000
-
-#define MM_VIRTIO_BASE          0x0a000000
-#define MM_VIRTIO_SIZE          0x200
 
 /* UART */
 #define WR_UART0_IRQ_0          82
@@ -72,7 +65,8 @@ struct WrArmMachineState {
 
     PL011State uart;
 
-    MemoryRegion *mr;
+    MemoryRegion mem_lo;
+    MemoryRegion mem_hi;
 
     struct arm_boot_info binfo;
     int fdt_size;
@@ -84,19 +78,19 @@ struct WrArmMachineState {
 OBJECT_DECLARE_SIMPLE_TYPE(WrArmMachineState, WR_ARM_MACHINE)
 
 enum {
-    WR_LOW_MEM,
+    WR_LO_MEM,
     WR_UART0,
     WR_GIC_DIST,
     WR_GIC_REDIST,
-    WR_HIGH_MEM,
+    WR_HI_MEM,
 };
 
 static const MemMapEntry wr_memmap[] = {
     [WR_UART0] =            { 0x401c8000, 0x00001000 },
     [WR_GIC_DIST] =         { 0x50800000, 0x00010000 },
     [WR_GIC_REDIST] =       { 0x50900000, 0x00200000 },
-    [WR_LOW_MEM] =          { 0x80000000, 0x80000000 },
-    [WR_HIGH_MEM] =         { 0x100000000, 0x0 }
+    [WR_LO_MEM] =           { 0x80000000, 0x80000000 },
+    [WR_HI_MEM] =           { 0x100000000, 0x0 }
 };
 
 
