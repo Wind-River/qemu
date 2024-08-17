@@ -29,6 +29,7 @@ NAMES += cache
 NAMES += drcov
 NAMES += ips
 NAMES += stoptrigger
+NAMES += devaccess
 
 ifeq ($(CONFIG_WIN32),y)
 SO_SUFFIX := .dll
