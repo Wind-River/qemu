@@ -32,7 +32,7 @@
 
 #define WR_ARM_COMPATIBLE   "nxp,s32g3"
 
-#define WR_MAX_ACPUS        8
+#define WR_MAX_CPUS         64
 
 #define WR_CORES_PER_CPU    1
 
@@ -59,7 +59,7 @@ struct WrArmMachineState {
     MachineState parent_obj;
 
     CPUClusterState cpu_cluster;
-    ARMCPU cpus[WR_MAX_ACPUS];
+    ARMCPU cpus[WR_MAX_CPUS];
     GICv3State gic;
     qemu_irq irqmap[WR_NUM_IRQ];
 
