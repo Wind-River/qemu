@@ -364,7 +364,7 @@ static void wr_arm_machine_class_init(ObjectClass *oc, void *data)
 
     mc->desc = "Wind River Generic ARM Machine";
     mc->init = wr_arm_init;
-    mc->max_cpus = 8;
+    mc->max_cpus = WR_MAX_CPUS;
     mc->default_cpus = 8;
     mc->no_cdrom = true;
     mc->default_ram_id = "ddr";
