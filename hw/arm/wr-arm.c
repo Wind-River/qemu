@@ -257,7 +257,7 @@ static void wr_arm_create_cpus(MachineState *machine)
 
         object_initialize_child(OBJECT(&s->cpu_cluster), "cpu[*]",
                                 &s->cpus[i],
-                                ARM_CPU_TYPE_NAME("cortex-a53"));
+                                machine->cpu_type);
         obj = OBJECT(&s->cpus[i]);
         if (i) {
             /* start APs in powered down state */
@@ -368,7 +368,7 @@ static void wr_arm_machine_class_init(ObjectClass *oc, void *data)
     mc->default_cpus = 8;
     mc->no_cdrom = true;
     mc->default_ram_id = "ddr";
-    mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-a53");
+    mc->default_cpu_type = ARM_CPU_TYPE_NAME(WR_DEFAULT_ARM_CPU);
 }
 
 static const TypeInfo wr_arm_machine_info = {
