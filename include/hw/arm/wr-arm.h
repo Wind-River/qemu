@@ -32,8 +32,9 @@
 
 #define WR_ARM_COMPATIBLE   "nxp,s32g3"
 
-#define WR_MAX_CPUS         64
+#define WR_DEFAULT_ARM_CPU  "cortex-a53"
 
+#define WR_MAX_CPUS         64
 #define WR_CORES_PER_CPU    1
 
 /* Number of external interrupt lines to configure the GIC with */
