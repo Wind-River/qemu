@@ -7,6 +7,9 @@
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 or
  * (at your option) any later version.
+ *
+ * 12 Jan 2024 - Do not return size of dtb from arm_boot_info::get_dtb()
+ *
  */
 
 #include "qemu/osdep.h"
