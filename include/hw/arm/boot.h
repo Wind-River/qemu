@@ -6,6 +6,8 @@
  *
  * This code is licensed under the LGPL.
  *
+ *
+ * 12 Jan 2024 - Do not return size of dtb from arm_boot_info::get_dtb()
  */
 
 #ifndef HW_ARM_BOOT_H
