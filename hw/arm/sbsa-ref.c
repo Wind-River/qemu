@@ -16,6 +16,9 @@
  *
  * You should have received a copy of the GNU General Public License along with
  * this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * 12 Jan 2024 - Do not return size of dtb from arm_boot_info::get_dtb()
+ *
  */
 
 #include "qemu/osdep.h"
