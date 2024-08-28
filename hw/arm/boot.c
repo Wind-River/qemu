@@ -5,6 +5,8 @@
  * Written by Paul Brook
  *
  * This code is licensed under the GPL.
+ *
+ * 12 Jan 2024 - Modified so arm_load_dtb packs the generated FDT.
  */
 
 #include "qemu/osdep.h"

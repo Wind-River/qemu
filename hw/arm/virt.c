@@ -26,6 +26,10 @@
  *    the kernel updates its device tree bindings and requires further
  *    information in a device binding that we aren't providing.
  * This is essentially the same approach kvmtool uses.
+ *
+ *
+ * 12 Jan 2024 - Do not return size of dtb from arm_boot_info::get_dtb()
+ *
  */
 
 #include "qemu/osdep.h"
