@@ -1,0 +1,89 @@
+# ci.yml, WR QEMU github CI configuration file.
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License version 2 as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+
+name: WR QEMU CI
+
+on:
+  push:
+    branches:
+      - wr-integration
+  pull_request:
+    branches:
+      - wr-integration
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout QEMU source
+        uses: actions/checkout@v4
+        with:
+          repository: Wind-River/qemu
+          path: qemu
+          # Use a specific branch or tag if needed
+          ref: wr-integration
+
+      - name: Set up dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf \
+            automake \
+            bison \
+            bzip2 \
+            build-essential \
+            cmake \
+            curl \
+            flex \
+            git \
+            lftp \
+            libaio-dev \
+            libcapstone-dev \
+            libelf1 \
+            libfdt-dev \
+            libglib2.0-dev \
+            libncurses5-dev \
+            libpixman-1-dev \
+            libslirp-dev \
+            libx11-6 \
+            libxext6 \
+            libxpm4 \
+            libz-dev \
+            make \
+            ninja-build \
+            python3 \
+            python3-pip \
+            screen \
+            texinfo \
+            unzip \
+            vsftpd \
+            wget \
+            zlib1g-dev
+
+      - name: Build QEMU
+        working-directory: qemu
+        run: |
+          ./configure --target-list="aarch64-softmmu,x86_64-softmmu" --enable-fdt --enable-plugins --enable-slirp --enable-capstone
+          make -j $(cat /proc/cpuinfo | grep "^processor" | wc -l)
+          make plugins
+          make check-build
+
+      - name: Run QEMU tests
+        working-directory: qemu
+        run: |
+          make check
+
