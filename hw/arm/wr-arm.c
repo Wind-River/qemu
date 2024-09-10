@@ -347,10 +347,31 @@ static void fdt_create(MachineState *machine)
     machine->fdt = fdt;
 }
 
-static void wr_arm_init(MachineState *machine)
+static void wr_arm_memory_init(MachineState *machine)
 {
     WrArmMachineState *s = WR_ARM_MACHINE(machine);
+    DeviceState *dev = qdev_new(TYPE_UNIMPLEMENTED_DEVICE);
+    const char unimp_name[] = "unimp";
 
+    /*
+     * Create "unimplemented" device spanning entire system address space.
+     * This unimp device has lowest priority and will catch and log all
+     * writes that do not land in an implemented device's MMIO space.
+     */
+    qdev_prop_set_string(dev, "name", unimp_name);
+    qdev_prop_set_uint64(dev, "size", 1UL << 48); //entire address space
+
+    object_property_add_child(OBJECT(s), unimp_name, OBJECT(dev));
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(dev), &error_fatal);
+
+    memory_region_add_subregion(get_system_memory(), 0,
+                                sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 0));
+
+    /*
+     * Map the system RAM into the appropriate places in the address map.
+     * Split the system memory up into low and high mem regions if necessary
+     * and as dictated by the system address map.
+     */
     if (memory_region_size(machine->ram) > wr_memmap[WR_LO_MEM].size) {
         memory_region_init_alias(&s->mem_hi, OBJECT(machine), "ddr-ram-hi",
                                  machine->ram, wr_memmap[WR_LO_MEM].size,
@@ -361,6 +382,13 @@ static void wr_arm_init(MachineState *machine)
     memory_region_init_alias(&s->mem_lo, OBJECT(machine), "ddr-ram-low",
                              machine->ram, 0, wr_memmap[WR_LO_MEM].size);
     memory_region_add_subregion(get_system_memory(), wr_memmap[WR_LO_MEM].base, &s->mem_lo);
+}
+
+static void wr_arm_init(MachineState *machine)
+{
+    WrArmMachineState *s = WR_ARM_MACHINE(machine);
+
+    wr_arm_memory_init(machine);
 
     fdt_create(machine);
 
