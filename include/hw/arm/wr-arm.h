@@ -55,7 +55,7 @@
 #define WR_UART0_IRQ_0          82
 
 /* virtio */
-#define NUM_VIRTIO_TRANSPORTS   4
+#define WR_VIRTIO_SZ            0x200
 #define WR_VIRTIO_IRQ_BASE      0x68
 
 
@@ -82,14 +82,16 @@ struct WrArmMachineState {
 OBJECT_DECLARE_SIMPLE_TYPE(WrArmMachineState, WR_ARM_MACHINE)
 
 enum {
-    WR_LO_MEM,
+    WR_VIRTIO,
     WR_UART0,
     WR_GIC_DIST,
     WR_GIC_REDIST,
+    WR_LO_MEM,
     WR_HI_MEM,
 };
 
 static const MemMapEntry wr_memmap[] = {
+    [WR_VIRTIO] =           { 0x08000000, 0x00000800 },
     [WR_UART0] =            { 0x401c8000, 0x00001000 },
     [WR_GIC_DIST] =         { 0x50800000, 0x00010000 },
     [WR_GIC_REDIST] =       { 0x50900000, 0x00200000 },
