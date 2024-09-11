@@ -38,6 +38,34 @@ static void *wr_arm_get_dtb(const struct arm_boot_info *binfo)
     return ms->fdt;
 }
 
+static void wr_arm_create_virtio_transports(MachineState *machine)
+{
+    WrArmMachineState *s = WR_ARM_MACHINE(machine);
+    const char compat[] = "virtio,mmio";
+    int num_transports = wr_memmap[WR_VIRTIO].size / WR_VIRTIO_SZ;
+    int i;
+
+    /* Create transports in reverse order so they appear in the
+     * finished device tree lowest address first. */
+    for (i = num_transports - 1; i >= 0; i--) {
+        char *name;
+        int irq = WR_VIRTIO_IRQ_BASE + i;
+        hwaddr base = wr_memmap[WR_VIRTIO].base + (i * WR_VIRTIO_SZ);
+        sysbus_create_simple("virtio-mmio", base,
+                             qdev_get_gpio_in(DEVICE(&s->gic), irq));
+
+        name = g_strdup_printf("/virtio_mmio@%" PRIx64, base);
+        qemu_fdt_add_subnode(machine->fdt, name);
+        qemu_fdt_setprop_string(machine->fdt, name, "compatible", compat);
+        qemu_fdt_setprop_sized_cells(machine->fdt, name, "reg", 2, base, 2, WR_VIRTIO_SZ);
+        qemu_fdt_setprop_cells(machine->fdt, name, "interrupts",
+                               GIC_FDT_IRQ_TYPE_SPI, irq,
+                               GIC_FDT_IRQ_FLAGS_EDGE_LO_HI);
+        qemu_fdt_setprop(machine->fdt, name, "dma-coherent", NULL, 0);
+        g_free(name);
+    }
+}
+
 static void wr_arm_create_uart(MachineState *machine)
 {
     DeviceState *dev;
@@ -345,6 +373,8 @@ static void wr_arm_init(MachineState *machine)
     wr_arm_create_clock(machine);
 
     wr_arm_create_uart(machine);
+
+    wr_arm_create_virtio_transports(machine);
 
     s->binfo.ram_size = machine->ram_size;
     if (wr_memmap[WR_LO_MEM].size) {
