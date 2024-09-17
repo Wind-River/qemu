@@ -276,31 +276,34 @@ static void fdt_add_canfd_nodes(VersalVirt *s)
     }
 }
 
-static void fdt_add_fixed_link_nodes(VersalVirt *s, char *gemname,
-                                     uint32_t phandle)
+static void fdt_add_generic_phy_node(VersalVirt *s, char *gemname,
+                                     uint64_t phy_id, uint32_t phandle)
 {
-    char *name = g_strdup_printf("%s/fixed-link", gemname);
+    char *name = g_strdup_printf("%s/ethernet-phy@%" PRIx64, gemname, phy_id);
+    const char compat_phy[] = "genericPhy";
 
     qemu_fdt_add_subnode(s->fdt, name);
     qemu_fdt_setprop_cell(s->fdt, name, "phandle", phandle);
-    qemu_fdt_setprop(s->fdt, name, "full-duplex", NULL, 0);
-    qemu_fdt_setprop_cell(s->fdt, name, "speed", 1000);
+    qemu_fdt_setprop_cell(s->fdt, name, "reg", phy_id);
+    qemu_fdt_setprop(s->fdt, name, "compatible",
+                     compat_phy, sizeof(compat_phy));
     g_free(name);
 }
 
 static void fdt_add_gem_nodes(VersalVirt *s)
 {
     uint64_t addrs[] = { MM_GEM1, MM_GEM0 };
+    uint64_t phy_ids[] = { MM_GEM0_PHY_ID, MM_GEM1_PHY_ID };
     unsigned int irqs[] = { VERSAL_GEM1_IRQ_0, VERSAL_GEM0_IRQ_0 };
     const char clocknames[] = "pclk\0hclk\0tx_clk\0rx_clk";
-    const char compat_gem[] = "cdns,zynqmp-gem\0cdns,gem";
+    const char compat_gem[] = "cdns,versal-gem\0cdns,gem";
     int i;
 
     for (i = 0; i < ARRAY_SIZE(addrs); i++) {
         char *name = g_strdup_printf("/ethernet@%" PRIx64, addrs[i]);
         qemu_fdt_add_subnode(s->fdt, name);
 
-        fdt_add_fixed_link_nodes(s, name, s->phandle.ethernet_phy[i]);
+        fdt_add_generic_phy_node(s, name, phy_ids[i], s->phandle.ethernet_phy[i]);
         qemu_fdt_setprop_string(s->fdt, name, "phy-mode", "rgmii-id");
         qemu_fdt_setprop_cell(s->fdt, name, "phy-handle",
                               s->phandle.ethernet_phy[i]);
