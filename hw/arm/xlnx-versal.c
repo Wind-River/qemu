@@ -147,6 +147,7 @@ typedef struct VersalMap {
         size_t num_prio_queue;
         const char *phy_mode;
         const uint32_t speed;
+        uint32_t phy_id; /* non-zero: use genericPhy node instead of fixed-link */
     } gem[3];
     size_t num_gem;
 
@@ -297,8 +298,8 @@ static const VersalMap VERSAL_MAP = {
     .sdhci[1] = { 0xf1050000, 128 },
     .num_sdhci = 2,
 
-    .gem[0] = { { 0xff0c0000, 56 }, 2, "rgmii-id", 1000 },
-    .gem[1] = { { 0xff0d0000, 58 }, 2, "rgmii-id", 1000 },
+    .gem[0] = { { 0xff0c0000, 56 }, 2, "rgmii-id", 1000, 0xc },
+    .gem[1] = { { 0xff0d0000, 58 }, 2, "rgmii-id", 1000, 0xd },
     .num_gem = 2,
 
     .zdma[0] = { "adma", { 0xffa80000, 60 }, 8, 0x10000, 1 },
@@ -1201,20 +1202,36 @@ static void versal_create_gem_fdt(Versal *s,
     g_autofree char *node;
     g_autofree char *phy_node;
     int phy_phandle;
-    const char compatible[] = "cdns,zynqmp-gem\0cdns,gem";
     const char clocknames[] = "pclk\0hclk\0tx_clk\0rx_clk";
     g_autofree uint32_t *irq_prop;
 
-    node = versal_fdt_add_simple_subnode(s, "/ethernet", map->map.addr, 0x1000,
-                                         compatible, sizeof(compatible));
-    phy_node = g_strdup_printf("%s/fixed-link", node);
+    if (map->phy_id) {
+        const char compat[] = "cdns,versal-gem\0cdns,gem";
+        node = versal_fdt_add_simple_subnode(s, "/ethernet", map->map.addr,
+                                             0x1000, compat, sizeof(compat));
+    } else {
+        const char compat[] = "cdns,zynqmp-gem\0cdns,gem";
+        node = versal_fdt_add_simple_subnode(s, "/ethernet", map->map.addr,
+                                             0x1000, compat, sizeof(compat));
+    }
+
     phy_phandle = qemu_fdt_alloc_phandle(s->cfg.fdt);
 
-    /* Fixed link PHY node */
-    qemu_fdt_add_subnode(s->cfg.fdt, phy_node);
-    qemu_fdt_setprop_cell(s->cfg.fdt, phy_node, "phandle", phy_phandle);
-    qemu_fdt_setprop(s->cfg.fdt, phy_node, "full-duplex", NULL, 0);
-    qemu_fdt_setprop_cell(s->cfg.fdt, phy_node, "speed", map->speed);
+    if (map->phy_id) {
+        const char compat_phy[] = "genericPhy";
+        phy_node = g_strdup_printf("%s/ethernet-phy@%x", node, map->phy_id);
+        qemu_fdt_add_subnode(s->cfg.fdt, phy_node);
+        qemu_fdt_setprop_cell(s->cfg.fdt, phy_node, "phandle", phy_phandle);
+        qemu_fdt_setprop_cell(s->cfg.fdt, phy_node, "reg", map->phy_id);
+        qemu_fdt_setprop(s->cfg.fdt, phy_node, "compatible",
+                         compat_phy, sizeof(compat_phy));
+    } else {
+        phy_node = g_strdup_printf("%s/fixed-link", node);
+        qemu_fdt_add_subnode(s->cfg.fdt, phy_node);
+        qemu_fdt_setprop_cell(s->cfg.fdt, phy_node, "phandle", phy_phandle);
+        qemu_fdt_setprop(s->cfg.fdt, phy_node, "full-duplex", NULL, 0);
+        qemu_fdt_setprop_cell(s->cfg.fdt, phy_node, "speed", map->speed);
+    }
 
     qemu_fdt_setprop_string(s->cfg.fdt, node, "phy-mode", map->phy_mode);
     qemu_fdt_setprop_cell(s->cfg.fdt, node, "phy-handle", phy_phandle);
@@ -1223,6 +1240,11 @@ static void versal_create_gem_fdt(Versal *s,
                            s->phandle.clk_125mhz, s->phandle.clk_125mhz);
     qemu_fdt_setprop(s->cfg.fdt, node, "clock-names",
                      clocknames, sizeof(clocknames));
+
+    if (map->phy_id) {
+        qemu_fdt_setprop_cell(s->cfg.fdt, node, "#address-cells", 1);
+        qemu_fdt_setprop_cell(s->cfg.fdt, node, "#size-cells", 0);
+    }
 
     irq_prop = g_new(uint32_t, map->num_prio_queue * 3);
     for (i = 0; i < map->num_prio_queue; i++) {
