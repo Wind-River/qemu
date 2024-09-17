@@ -189,8 +189,10 @@ struct Versal {
 
 #define MM_GEM0                     0xff0c0000U
 #define MM_GEM0_SIZE                0x10000
+#define MM_GEM0_PHY_ID              0xc
 #define MM_GEM1                     0xff0d0000U
 #define MM_GEM1_SIZE                0x10000
+#define MM_GEM1_PHY_ID              0xd
 
 #define MM_ADMA_CH0                 0xffa80000U
 #define MM_ADMA_CH0_SIZE            0x10000
