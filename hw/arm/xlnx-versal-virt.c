@@ -9,6 +9,8 @@
  * (at your option) any later version.
  *
  * 12 Jan 2024 - Do not return size of dtb from arm_boot_info::get_dtb()
+ * 17 Sep 2024 - Change fixed-link ethernet phy DT node to genericPhy
+ * 25 Sep 2024 - Modify DT compat string from xlnx-versal-virt to xlnx,versal
  *
  */
 
@@ -85,7 +87,7 @@ static void fdt_create(VersalVirt *s)
     qemu_fdt_setprop_cell(s->fdt, "/", "#size-cells", 0x2);
     qemu_fdt_setprop_cell(s->fdt, "/", "#address-cells", 0x2);
     qemu_fdt_setprop_string(s->fdt, "/", "model", mc->desc);
-    qemu_fdt_setprop_string(s->fdt, "/", "compatible", "xlnx-versal-virt");
+    qemu_fdt_setprop_string(s->fdt, "/", "compatible", "xlnx,versal");
 }
 
 static void fdt_add_clk_node(VersalVirt *s, const char *name,
