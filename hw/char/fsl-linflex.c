@@ -279,7 +279,7 @@ static void fsl_linflex_reset_init(Object *obj, ResetType type)
     s->regs[LINFLEX_DMARXE] =   0;
 }
 
-static void fsl_linflex_reset_hold(Object *obj)
+static void fsl_linflex_reset_hold(Object *obj, ResetType type)
 {
     FslLinflexState *s = FSL_LINFLEX(obj);
 
@@ -288,7 +288,7 @@ static void fsl_linflex_reset_hold(Object *obj)
     s->regs[LINFLEX_UARTSR] |= UARTSR_DTFTFF;
 }
 
-static void fsl_linflex_reset_exit(Object *obj)
+static void fsl_linflex_reset_exit(Object *obj, ResetType type)
 {
     FslLinflexState *s = FSL_LINFLEX(obj);
 
