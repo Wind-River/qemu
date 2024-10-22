@@ -1,0 +1,72 @@
+# -*- Mode: Python -*-
+# vim: filetype=python
+#
+# Copyright (C) 2024 Wind River Systems
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License version 2 as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+
+##
+# @InjectionValue:
+#
+# A single unsigned 64-bit integer.
+#
+# @value: single unsigned 64-bit integer.
+#
+# Since: 9.1
+##
+{ 'struct': 'InjectionValue',
+  'data': { 'value': 'uint64'} }
+
+##
+# @memwrite:
+#
+# Write a guest memory location from CPU[cpu_id]
+#
+# @addr: the virtual address to write to
+#
+# @size: the number of bytes to write at addr (max is 8)
+#
+# @val: the unsigned 64-bit integer value to write at addr
+#
+# @cpuid: the index of the virtual CPU to use for translating the
+#           virtual address
+#
+# Since: 9.1
+#
+##
+{ 'command': 'memwrite',
+  'data': {'addr': 'uint64', 'size': 'int', 'val': 'uint64', 'cpuid': 'int'}
+}
+
+##
+# @memread:
+#
+# Read a guest memory location from CPU[cpu_id]
+#
+# @addr: the virtual address to read from
+#
+# @size: the number of bytes to read at addr (max is 8)
+#
+# @cpuid: the index of the virtual CPU to use for translating the
+#           virtual address
+#
+# Returns: InjectionValue, a structure with the unsigned 64-bit integer value read
+#
+# Since: 9.1
+#
+##
+{ 'command': 'memread',
+  'data': {'addr': 'uint64', 'size': 'int', 'cpuid': 'int'},
+  'returns' : 'InjectionValue'
+}

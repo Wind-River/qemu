@@ -20,6 +20,8 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
+ *
+ * 22 Oct 2024 - Add QMP memread/memwrite APIs
  */
 
 #include "qemu/osdep.h"
@@ -29,6 +31,8 @@
 #include "qapi/qapi-commands-machine.h"
 #include "qapi/qapi-commands-misc.h"
 #include "qapi/qapi-events-run-state.h"
+#include "qapi/qapi-types-injection.h"
+#include "qapi/qapi-commands-injection.h"
 #include "qapi/qmp/qerror.h"
 #include "exec/gdbstub.h"
 #include "sysemu/hw_accel.h"
@@ -869,6 +873,59 @@ void qmp_pmemsave(uint64_t addr, uint64_t size, const char *filename,
 
 exit:
     fclose(f);
+}
+
+void qmp_memwrite(uint64_t addr, int64_t size, uint64_t val,
+                  int64_t cpu_id, Error **errp)
+{
+    CPUState *cpu;
+
+    if (size <= 0 || size > sizeof(uint64_t)) {
+        error_setg(errp, QERR_INVALID_PARAMETER_VALUE, "size",
+                   "out of range");
+        return;
+    }
+
+    cpu = qemu_get_cpu(cpu_id);
+    if (cpu == NULL) {
+        error_setg(errp, QERR_INVALID_PARAMETER_VALUE, "cpu-index",
+                   "a CPU number");
+        return;
+    }
+
+    if (cpu_memory_rw_debug(cpu, addr, (uint64_t *)&val, size, 1)) {
+        error_setg(errp, "Invalid addr 0x%016" PRIx64 "/size %" PRIu64
+                         " specified", addr, size);
+    }
+}
+
+InjectionValue *qmp_memread(uint64_t addr, int64_t size,
+                            int64_t cpu_id, Error **errp)
+{
+    InjectionValue *ret = g_new0(InjectionValue, 1);
+    CPUState *cpu;
+
+    ret->value = 0;
+
+    if (size <= 0 || size > sizeof(uint64_t)) {
+        error_setg(errp, QERR_INVALID_PARAMETER_VALUE, "size",
+                   "out of range");
+        return NULL;
+    }
+
+    cpu = qemu_get_cpu(cpu_id);
+    if (cpu == NULL) {
+        error_setg(errp, QERR_INVALID_PARAMETER_VALUE, "cpu-index",
+                   "a CPU number");
+        return NULL;
+    }
+
+    if (cpu_memory_rw_debug(cpu, addr, &ret->value, size, 0) != 0) {
+        error_setg(errp, "Invalid addr 0x%016" PRIx64 "/size %" PRIu64
+                         " specified", addr, size);
+    }
+
+    return ret;
 }
 
 void qmp_inject_nmi(Error **errp)
