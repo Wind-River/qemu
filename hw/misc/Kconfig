@@ -213,4 +213,9 @@ config IOSB
 config XLNX_VERSAL_TRNG
     bool
 
+config WR_PCI_LEDS
+    bool
+    default y if PCI_DEVICES
+    depends on PCI
+
 source macio/Kconfig
