@@ -107,5 +107,9 @@ For version history and release notes, please look at the git history.
 Contact
 =======
 
-The Wind River QEMU team can be reached through Nelson.Ho@windriver.com
+The Wind River QEMU team can be reached through
+
+James.Hui@windriver.com
+
+Nelson.Ho@windriver.com
 
