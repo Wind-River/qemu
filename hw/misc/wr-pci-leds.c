@@ -4,12 +4,11 @@
 #define TYPE_MY_DEVICE "wr-pci-leds"
 OBJECT_DECLARE_SIMPLE_TYPE(MyDeviceState, MY_DEVICE)
 
-typedef struct MyDeviceState
-{
+typedef struct MyDeviceState {
     PCIDevice parent_obj;
     MemoryRegion bar;
 
-    int32_t led0,led1;
+    uint64_t led0,led1;
 } MyDeviceState;
 static void my_device_write(void *opaque, hwaddr addr, uint64_t data, unsigned size)
 {
@@ -67,14 +66,3 @@ static void my_device_register_types(void)
     type_register_static(&my_device_info);
 }
 type_init(my_device_register_types)
-
-/* Notes:
- *
-   // Kconfig
-  config MY_DEVICE
-    bool
-    default y
-
-    // mesa.build
-    system_ss.add(when: 'CONFIG_MY_DEVICE', if_true: files('my-device.c'))
-*/
