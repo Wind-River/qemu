@@ -36,16 +36,14 @@
 #include "sysemu/dma.h"
 #include "migration/vmstate.h"
 #include "hw/qdev-properties.h"
+#include "hw/arm/smmu500.h"
 
 #ifndef XILINX_SMMU500_ERR_DEBUG
 #define XILINX_SMMU500_ERR_DEBUG 0
 #endif
 
-#define TYPE_XILINX_SMMU500 "arm.mmu-500"
-#define TYPE_XILINX_SMMU500_IOMMU_MEMORY_REGION "arm.mmu-500-iommu-memory-region"
-
 #define XILINX_SMMU500(obj) \
-     OBJECT_CHECK(SMMU, (obj), TYPE_XILINX_SMMU500)
+     OBJECT_CHECK(SMMU500State, (obj), TYPE_XILINX_SMMU500)
 
 #define DEBUG_DEV_SMMU 0
 #define DEBUG_DEV_SMMU_PTW 0
@@ -1044,53 +1042,6 @@ REG32(SMMU_GPAR, 0x180)
 REG32(SMMU_GPAR_H, 0x184)
 REG32(SMMU_GATSR, 0x188)
 
-/* This should be configurable per instance.  */
-#define PAGESIZE 4096
-
-#define MAX_CB 128
-
-#define R_MAX (2 * MAX_CB * PAGESIZE)
-
-/* Maximum number of TBUs supported by this model.  */
-#define MAX_TBU 16
-
-typedef struct SMMU SMMU;
-typedef struct TBU {
-    SMMU *smmu;
-    IOMMUMemoryRegion iommu;
-    AddressSpace *as;
-} TBU;
-
-struct SMMU {
-    SysBusDevice parent_obj;
-    MemoryRegion iomem;
-
-    MemoryRegion *dma_mr;
-    AddressSpace dma_as;
-
-    TBU tbu[MAX_TBU];
-    uint8_t num_tbu;
-
-    struct {
-        qemu_irq global;
-        qemu_irq context[MAX_CB];
-    } irq;
-
-    struct {
-        uint32_t pamax;
-        uint16_t num_smr;
-        uint16_t num_cb;
-        uint16_t num_pages;
-        bool ato;
-        uint8_t version;
-    } cfg;
-
-    RegisterAccessInfo *rai_smr;
-    RegisterAccessInfo *rai_cb;
-    uint32_t regs[R_MAX];
-    RegisterInfo regs_info[R_MAX];
-};
-
 /* Generic page attributes.  */
 typedef struct PageAttr {
     uint64_t pa;
@@ -1116,12 +1067,12 @@ typedef struct TransReq {
 } TransReq;
 
 /* Compute the base offset (index into s->regs) for a given CB.  */
-static unsigned int smmu_cb_offset(SMMU *s, unsigned int cb)
+static unsigned int smmu_cb_offset(SMMU500State *s, unsigned int cb)
 {
     return ((s->cfg.num_pages + cb) * PAGESIZE) / 4;
 }
 
-static void smmu_update_ctx_irq(SMMU *s, unsigned int cb)
+static void smmu_update_ctx_irq(SMMU500State *s, unsigned int cb)
 {
     unsigned int cb_offset = smmu_cb_offset(s, cb);
     uint32_t sctlr;
@@ -1138,7 +1089,7 @@ static void smmu_update_ctx_irq(SMMU *s, unsigned int cb)
     qemu_set_irq(s->irq.context[cb], pending);
 }
 
-static void smmu_fault(SMMU *s, unsigned int cb, TransReq *req, uint64_t syn)
+static void smmu_fault(SMMU500State *s, unsigned int cb, TransReq *req, uint64_t syn)
 {
     unsigned int cb_offset = smmu_cb_offset(s, cb);
 
@@ -1154,7 +1105,7 @@ static void smmu_fault(SMMU *s, unsigned int cb, TransReq *req, uint64_t syn)
     smmu_update_ctx_irq(s, cb);
 }
 
-static int smmu_stream_id_match(SMMU *s, uint32_t stream_id)
+static int smmu_stream_id_match(SMMU500State *s, uint32_t stream_id)
 {
     unsigned int nr_smr = ARRAY_FIELD_EX32(s->regs, SMMU_SIDR0, NUMSMRG);
     unsigned int i;
@@ -1234,7 +1185,7 @@ static bool check_out_addr(uint64_t addr, unsigned int outputsize)
     return true;
 }
 
-static void smmu_ptw64(SMMU *s, unsigned int cb, TransReq *req)
+static void smmu_ptw64(SMMU500State *s, unsigned int cb, TransReq *req)
 {
     static const unsigned int outsize_map[] = {
         [0] = 32,
@@ -1547,7 +1498,7 @@ do_fault:
     smmu_fault(s, cb, req, level);
 }
 
-static bool smmu500_at64(SMMU *s, unsigned int cb, hwaddr va,
+static bool smmu500_at64(SMMU500State *s, unsigned int cb, hwaddr va,
                          bool wr, bool s2, hwaddr *pa, int *prot)
 {
     unsigned int cb_offset = smmu_cb_offset(s, cb);
@@ -1622,7 +1573,7 @@ static bool smmu500_at64(SMMU *s, unsigned int cb, hwaddr va,
     return req.err;
 }
 
-static bool smmu500_at(SMMU *s, unsigned int cb, hwaddr va,
+static bool smmu500_at(SMMU500State *s, unsigned int cb, hwaddr va,
                        bool wr, bool s2, hwaddr *pa, int *prot)
 {
     return smmu500_at64(s, cb, va, wr, s2, pa, prot);
@@ -1630,7 +1581,7 @@ static bool smmu500_at(SMMU *s, unsigned int cb, hwaddr va,
 
 #define ADDRMASK    ((1ULL << 12) - 1)
 
-static void smmu500_gat(SMMU *s, uint64_t v, bool wr, bool s2)
+static void smmu500_gat(SMMU500State *s, uint64_t v, bool wr, bool s2)
 {
     uint64_t va = v & ~ADDRMASK;
     unsigned int cb = v & ADDRMASK;
@@ -1647,7 +1598,7 @@ static void smmu500_gat(SMMU *s, uint64_t v, bool wr, bool s2)
 
 static void smmu_gats1pr(RegisterInfo *reg, uint64_t val)
 {
-    SMMU *s = XILINX_SMMU500(reg->opaque);
+    SMMU500State *s = XILINX_SMMU500(reg->opaque);
 
     val <<= 32;
     val |= s->regs[(reg->access->addr / 4) - 1];
@@ -1656,7 +1607,7 @@ static void smmu_gats1pr(RegisterInfo *reg, uint64_t val)
 
 static void smmu_gats1pw(RegisterInfo *reg, uint64_t val)
 {
-    SMMU *s = XILINX_SMMU500(reg->opaque);
+    SMMU500State *s = XILINX_SMMU500(reg->opaque);
 
     val <<= 32;
     val |= s->regs[(reg->access->addr / 4) - 1];
@@ -1665,7 +1616,7 @@ static void smmu_gats1pw(RegisterInfo *reg, uint64_t val)
 
 static void smmu_gats12pr(RegisterInfo *reg, uint64_t val)
 {
-    SMMU *s = XILINX_SMMU500(reg->opaque);
+    SMMU500State *s = XILINX_SMMU500(reg->opaque);
 
     val <<= 32;
     val |= s->regs[(reg->access->addr / 4) - 1];
@@ -1674,7 +1625,7 @@ static void smmu_gats12pr(RegisterInfo *reg, uint64_t val)
 
 static void smmu_gats12pw(RegisterInfo *reg, uint64_t val)
 {
-    SMMU *s = XILINX_SMMU500(reg->opaque);
+    SMMU500State *s = XILINX_SMMU500(reg->opaque);
 
     val <<= 32;
     val |= s->regs[(reg->access->addr / 4) - 1];
@@ -1683,7 +1634,7 @@ static void smmu_gats12pw(RegisterInfo *reg, uint64_t val)
 
 static void smmu_nscr0_pw(RegisterInfo *reg, uint64_t val)
 {
-    SMMU *s = XILINX_SMMU500(reg->opaque);
+    SMMU500State *s = XILINX_SMMU500(reg->opaque);
 
     /* FIXME: Take care of secure vs non-secure accesses.  */
     s->regs[R_SMMU_SCR0] = val;
@@ -1707,7 +1658,7 @@ static IOMMUTLBEntry smmu_translate(IOMMUMemoryRegion *mr, hwaddr addr,
 
 {
     TBU *tbu = container_of(mr, TBU, iommu);
-    SMMU *s = tbu->smmu;
+    SMMU500State *s = tbu->smmu;
     IOMMUTLBEntry ret = {
         .target_as = tbu->as,
         .translated_addr = addr,
@@ -1742,7 +1693,7 @@ static IOMMUTLBEntry smmu_translate(IOMMUMemoryRegion *mr, hwaddr addr,
 
 static void smmu_fsr_pw(RegisterInfo *reg, uint64_t val)
 {
-    SMMU *s = XILINX_SMMU500(reg->opaque);
+    SMMU500State *s = XILINX_SMMU500(reg->opaque);
     unsigned int i;
 
     for (i = 0; i < 16; i++) {
@@ -2069,7 +2020,7 @@ static const RegisterAccessInfo smmu_cb_page_regs_info[] = {
 
 static void smmu500_reset(DeviceState *dev)
 {
-    SMMU *s = XILINX_SMMU500(dev);
+    SMMU500State *s = XILINX_SMMU500(dev);
     unsigned int num_pages_log2 = 31 - clz32(s->cfg.num_cb);
     unsigned int i;
 
@@ -2097,7 +2048,7 @@ static const MemoryRegionOps smmu500_ops = {
     },
 };
 
-static int smmu_populate_regarray(SMMU *s,
+static int smmu_populate_regarray(SMMU500State *s,
                                   RegisterInfoArray *r_array, int pos,
                                   const RegisterAccessInfo *rae,
                                   int num_rae)
@@ -2123,7 +2074,7 @@ static int smmu_populate_regarray(SMMU *s,
     return i + pos;
 }
 
-static void smmu_create_rai_smr(SMMU *s)
+static void smmu_create_rai_smr(SMMU500State *s)
 {
     int i;
 
@@ -2136,7 +2087,7 @@ static void smmu_create_rai_smr(SMMU *s)
     }
 }
 
-static void smmu_create_rai_cb(SMMU *s)
+static void smmu_create_rai_cb(SMMU500State *s)
 {
     int cb;
 
@@ -2173,7 +2124,7 @@ static void smmu_create_rai_cb(SMMU *s)
     }
 }
 
-static RegisterInfoArray *smmu_create_regarray(SMMU *s)
+static RegisterInfoArray *smmu_create_regarray(SMMU500State *s)
 {
     const char *device_prefix = object_get_typename(OBJECT(s));
     uint64_t memory_size = R_MAX * 4;
@@ -2229,7 +2180,7 @@ static RegisterInfoArray *smmu_create_regarray(SMMU *s)
 
 static void smmu500_realize(DeviceState *dev, Error **errp)
 {
-    SMMU *s = XILINX_SMMU500(dev);
+    SMMU500State *s = XILINX_SMMU500(dev);
     SysBusDevice *sbd = SYS_BUS_DEVICE(dev);
     RegisterInfoArray *reg_array;
     unsigned int i;
@@ -2279,7 +2230,7 @@ static void smmu500_init(Object *obj)
     s->num_tbu = MAX_TBU;
 }
 
-static void smmu_free_rai(SMMU *s, RegisterAccessInfo *rai, int num)
+static void smmu_free_rai(SMMU500State *s, RegisterAccessInfo *rai, int num)
 {
     int i;
 
@@ -2295,19 +2246,19 @@ static void smmu_free_rai(SMMU *s, RegisterAccessInfo *rai, int num)
 
 static void smmu500_finalize(Object *obj)
 {
-    SMMU *s = XILINX_SMMU500(obj);
+    SMMU500State *s = XILINX_SMMU500(obj);
 
     smmu_free_rai(s, s->rai_smr, s->cfg.num_smr * 2);
     smmu_free_rai(s, s->rai_cb, s->cfg.num_cb * NUM_REGS_PER_CB);
 }
 
 static Property smmu_properties[] = {
-    DEFINE_PROP_UINT32("pamax", SMMU, cfg.pamax, 48),
-    DEFINE_PROP_UINT16("num-smr", SMMU, cfg.num_smr, 48),
-    DEFINE_PROP_UINT16("num-cb", SMMU, cfg.num_cb, 16),
-    DEFINE_PROP_UINT16("num-pages", SMMU, cfg.num_pages, 16),
-    DEFINE_PROP_BOOL("ato", SMMU, cfg.ato, true),
-    DEFINE_PROP_UINT8("version", SMMU, cfg.version, 0x21),
+    DEFINE_PROP_UINT32("pamax", SMMU500State, cfg.pamax, 48),
+    DEFINE_PROP_UINT16("num-smr", SMMU500State, cfg.num_smr, 48),
+    DEFINE_PROP_UINT16("num-cb", SMMU500State, cfg.num_cb, 16),
+    DEFINE_PROP_UINT16("num-pages", SMMU500State, cfg.num_pages, 16),
+    DEFINE_PROP_BOOL("ato", SMMU500State, cfg.ato, true),
+    DEFINE_PROP_UINT8("version", SMMU500State, cfg.version, 0x21),
     DEFINE_PROP_END_OF_LIST(),
 };
 
@@ -2316,7 +2267,7 @@ static const VMStateDescription vmstate_smmu500 = {
     .version_id = 1,
     .minimum_version_id = 1,
     .fields = (VMStateField[]) {
-        VMSTATE_UINT32_ARRAY(regs, SMMU, R_MAX),
+        VMSTATE_UINT32_ARRAY(regs, SMMU500State, R_MAX),
         VMSTATE_END_OF_LIST(),
     }
 };
@@ -2344,7 +2295,7 @@ static void smmu500_iommu_memory_region_class_init(ObjectClass *klass,
 static const TypeInfo smmu500_info = {
     .name          = TYPE_XILINX_SMMU500,
     .parent        = TYPE_SYS_BUS_DEVICE,
-    .instance_size = sizeof(SMMU),
+    .instance_size = sizeof(SMMU500State),
     .class_init    = smmu500_class_init,
     .instance_init = smmu500_init,
     .instance_finalize = smmu500_finalize,
