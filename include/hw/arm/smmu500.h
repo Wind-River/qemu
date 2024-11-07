@@ -47,14 +47,15 @@
 OBJECT_DECLARE_SIMPLE_TYPE(SMMU500State, XILINX_SMMU500)
 
 /* This should be configurable per instance.  */
-#define PAGESIZE 4096
+#define SMMU_PAGESIZE 4096
 
+/* Maximum number of Context Banks supported by this model */
 #define MAX_CB 128
-
-#define R_MAX (2 * MAX_CB * PAGESIZE)
 
 /* Maximum number of TBUs supported by this model.  */
 #define MAX_TBU 16
+
+#define SMMU_R_MAX (2 * MAX_CB * SMMU_PAGESIZE)
 
 /* Forward declaration */
 struct SMMU500State;
@@ -91,6 +92,6 @@ typedef struct SMMU500State {
 
     RegisterAccessInfo *rai_smr;
     RegisterAccessInfo *rai_cb;
-    uint32_t regs[R_MAX];
-    RegisterInfo regs_info[R_MAX];
+    uint32_t regs[SMMU_R_MAX];
+    RegisterInfo regs_info[SMMU_R_MAX];
 } SMMU500State;
