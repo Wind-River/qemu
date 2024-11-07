@@ -93,7 +93,7 @@ REG32(SMMU_SCR1, 0x4)
 REG32(SMMU_SACR, 0x10)
     FIELD(SMMU_SACR, NORMALIZE, 27, 1)
     FIELD(SMMU_SACR, CACHE_LOCK, 26, 1)
-    FIELD(SMMU_SACR, PAGESIZE, 16, 1)
+    FIELD(SMMU_SACR, SMMU_PAGESIZE, 16, 1)
     FIELD(SMMU_SACR, S2CRB_TLBEN, 10, 1)
     FIELD(SMMU_SACR, MMUDISB_TLBEN, 9, 1)
     FIELD(SMMU_SACR, SMTNMB_TLBEN, 8, 1)
@@ -112,7 +112,7 @@ REG32(SMMU_SIDR0, 0x20)
     FIELD(SMMU_SIDR0, NUMSIDB, 9, 4)
     FIELD(SMMU_SIDR0, NUMSMRG, 0, 8)
 REG32(SMMU_SIDR1, 0x24)
-    FIELD(SMMU_SIDR1, PAGESIZE, 31, 1)
+    FIELD(SMMU_SIDR1, SMMU_PAGESIZE, 31, 1)
     FIELD(SMMU_SIDR1, NUMPAGENDXB, 28, 3)
     FIELD(SMMU_SIDR1, NUMS2CB, 16, 8)
     FIELD(SMMU_SIDR1, SMCD, 15, 1)
@@ -1069,7 +1069,7 @@ typedef struct TransReq {
 /* Compute the base offset (index into s->regs) for a given CB.  */
 static unsigned int smmu_cb_offset(SMMU500State *s, unsigned int cb)
 {
-    return ((s->cfg.num_pages + cb) * PAGESIZE) / 4;
+    return ((s->cfg.num_pages + cb) * SMMU_PAGESIZE) / 4;
 }
 
 static void smmu_update_ctx_irq(SMMU500State *s, unsigned int cb)
@@ -2127,7 +2127,7 @@ static void smmu_create_rai_cb(SMMU500State *s)
 static RegisterInfoArray *smmu_create_regarray(SMMU500State *s)
 {
     const char *device_prefix = object_get_typename(OBJECT(s));
-    uint64_t memory_size = R_MAX * 4;
+    uint64_t memory_size = SMMU_R_MAX * 4;
     RegisterInfoArray *r_array;
     int num_regs;
     int pos = 0;
@@ -2185,7 +2185,7 @@ static void smmu500_realize(DeviceState *dev, Error **errp)
     RegisterInfoArray *reg_array;
     unsigned int i;
 
-    memory_region_init(&s->iomem, OBJECT(dev), TYPE_XILINX_SMMU500, R_MAX * 4);
+    memory_region_init(&s->iomem, OBJECT(dev), TYPE_XILINX_SMMU500, SMMU_R_MAX * 4);
     reg_array = smmu_create_regarray(s);
     memory_region_add_subregion(&s->iomem,
                                 0x0,
@@ -2267,7 +2267,7 @@ static const VMStateDescription vmstate_smmu500 = {
     .version_id = 1,
     .minimum_version_id = 1,
     .fields = (VMStateField[]) {
-        VMSTATE_UINT32_ARRAY(regs, SMMU500State, R_MAX),
+        VMSTATE_UINT32_ARRAY(regs, SMMU500State, SMMU_R_MAX),
         VMSTATE_END_OF_LIST(),
     }
 };
