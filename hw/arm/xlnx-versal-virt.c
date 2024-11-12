@@ -487,8 +487,7 @@ static void fdt_add_memory_nodes(VersalVirt *s, void *fdt, uint64_t ram_size)
     } addr_ranges[] = {
         { MM_TOP_DDR, MM_TOP_DDR_SIZE },
         { MM_TOP_DDR_2, MM_TOP_DDR_2_SIZE },
-        { MM_TOP_DDR_3, MM_TOP_DDR_3_SIZE },
-        { MM_TOP_DDR_4, MM_TOP_DDR_4_SIZE }
+        { MM_TOP_DDR_3, MM_TOP_DDR_3_SIZE }
     };
     uint64_t mem_reg_prop[8] = {0};
     uint64_t size = ram_size;
