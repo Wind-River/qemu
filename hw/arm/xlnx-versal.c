@@ -1846,7 +1846,7 @@ static void versal_unimp_common(Versal *s)
 
 static void versal_unimp(Versal *s)
 {
-    versal_unimp_area(s, "psm", &s->mr_ps, 0xffc80000, 0x70000);
+    versal_unimp_area(s, "psm", &s->mr_ps, 0xffc80000, 0x80000);
     versal_unimp_area(s, "crf", &s->mr_ps, 0xfd1a0000, 0x140000);
     versal_unimp_area(s, "apu", &s->mr_ps, 0xfd5c0000, 0x100);
     versal_unimp_area(s, "iou-scntr", &s->mr_ps, 0xff130000, 0x10000);
