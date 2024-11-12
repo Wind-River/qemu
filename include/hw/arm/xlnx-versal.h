@@ -220,7 +220,7 @@ struct Versal {
 #define MM_TOP_DDR_4_SIZE           0xb780000000ULL
 
 #define MM_PSM_START                0xffc80000U
-#define MM_PSM_END                  0xffcf0000U
+#define MM_PSM_END                  0xffd00000U
 
 #define MM_CRL                      0xff5e0000U
 #define MM_CRL_SIZE                 0x300000
