@@ -237,10 +237,9 @@ static const VersalMap VERSAL_MAP = {
 
     .ddr = {
         .chan[0] = { .addr = 0x0, .size = 2 * GiB },
-        .chan[1] = { .addr = 0x800000000ull, .size = 32 * GiB },
-        .chan[2] = { .addr = 0xc00000000ull, .size = 256 * GiB },
-        .chan[3] = { .addr = 0x10000000000ull, .size = 734 * GiB },
-        .num_chan = 4,
+        .chan[1] = { .addr = 0x800000000ull, .size = 6 * GiB },
+        .chan[2] = { .addr = 0x50000000000ull, .size = 8 * GiB },
+        .num_chan = 3,
     },
 
     .apu = {
