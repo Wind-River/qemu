@@ -803,8 +803,7 @@ static void versal_map_ddr(Versal *s)
     } addr_ranges[] = {
         { MM_TOP_DDR, MM_TOP_DDR_SIZE },
         { MM_TOP_DDR_2, MM_TOP_DDR_2_SIZE },
-        { MM_TOP_DDR_3, MM_TOP_DDR_3_SIZE },
-        { MM_TOP_DDR_4, MM_TOP_DDR_4_SIZE }
+        { MM_TOP_DDR_3, MM_TOP_DDR_3_SIZE }
     };
     uint64_t offset = 0;
     int i;

@@ -69,7 +69,7 @@ struct Versal {
 
     struct {
         /* 4 ranges to access DDR.  */
-        MemoryRegion mr_ddr_ranges[4];
+        MemoryRegion mr_ddr_ranges[3];
     } noc;
 
     struct {
@@ -213,11 +213,9 @@ struct Versal {
 #define MM_TOP_DDR                  0x0
 #define MM_TOP_DDR_SIZE             0x80000000U
 #define MM_TOP_DDR_2                0x800000000ULL
-#define MM_TOP_DDR_2_SIZE           0x800000000ULL
-#define MM_TOP_DDR_3                0xc000000000ULL
-#define MM_TOP_DDR_3_SIZE           0x4000000000ULL
-#define MM_TOP_DDR_4                0x10000000000ULL
-#define MM_TOP_DDR_4_SIZE           0xb780000000ULL
+#define MM_TOP_DDR_2_SIZE           0x180000000ULL
+#define MM_TOP_DDR_3                0x50000000000ULL
+#define MM_TOP_DDR_3_SIZE           0x200000000ULL
 
 #define MM_PSM_START                0xffc80000U
 #define MM_PSM_END                  0xffd00000U
