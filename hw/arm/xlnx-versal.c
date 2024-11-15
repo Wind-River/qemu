@@ -45,6 +45,7 @@
 #include "hw/intc/arm_gicv3_common.h"
 #include "hw/intc/arm_gicv3_its_common.h"
 #include "hw/intc/arm_gic.h"
+#include "hw/arm/smmu500.h"
 #include "hw/core/split-irq.h"
 #include "target/arm/cpu.h"
 #include "hw/cpu/cluster.h"
@@ -175,6 +176,8 @@ typedef struct VersalMap {
         int irq;
     } usb[2];
     size_t num_usb;
+
+    VersalSimplePeriphMap smmu;
 
     struct VersalEfuseMap {
         uint64_t ctrl;
@@ -313,6 +316,8 @@ static const VersalMap VERSAL_MAP = {
 
     .usb[0] = { .xhci = 0xfe200000, .ctrl = 0xff9d0000, .irq = 22 },
     .num_usb = 1,
+
+    .smmu = { 0xfd800000, 139 },
 
     .efuse = { .ctrl = 0xf1240000, .cache = 0xf1250000, .irq = 171 },
 
@@ -1726,6 +1731,30 @@ static inline void versal_create_crl(Versal *s)
     }
 }
 
+static void versal_create_smmu(Versal *s, const VersalSimplePeriphMap *map)
+{
+    DeviceState *dev;
+    SysBusDevice *sbd;
+    MemoryRegion *mr;
+    g_autofree char *node;
+    const char compatible[] = "arm,smmuv2";
+
+    dev = qdev_new(TYPE_XILINX_SMMU500);
+    object_property_add_child(OBJECT(s), "mmu-500", OBJECT(dev));
+    sbd = SYS_BUS_DEVICE(dev);
+    sysbus_realize_and_unref(sbd, &error_fatal);
+
+    mr = sysbus_mmio_get_region(sbd, 0);
+    memory_region_add_subregion(&s->mr_ps, map->addr, mr);
+    versal_sysbus_connect_irq(s, sbd, 0, map->irq);
+
+    node = versal_fdt_add_simple_subnode(s, "/smmu", map->addr, 0x40000,
+                                         compatible, sizeof(compatible));
+    qemu_fdt_setprop_cells(s->cfg.fdt, node, "interrupts",
+                           GIC_FDT_IRQ_TYPE_SPI, map->irq,
+                           GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+}
+
 /*
  * This takes the board allocated linear DDR memory and creates aliases
  * for each split DDR range/aperture on the Versal address map.
@@ -1938,6 +1967,10 @@ static void versal_realize_common(Versal *s)
 
     for (i = 0; i < map->num_usb; i++) {
         versal_create_usb(s, &map->usb[i]);
+    }
+
+    if (map->smmu.addr) {
+        versal_create_smmu(s, &map->smmu);
     }
 
     versal_create_efuse(s, &map->efuse);
