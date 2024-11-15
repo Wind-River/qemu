@@ -18,6 +18,7 @@
 #include "hw/sd/sdhci.h"
 #include "hw/intc/arm_gicv3.h"
 #include "hw/char/pl011.h"
+#include "hw/arm/smmu500.h"
 #include "hw/dma/xlnx-zdma.h"
 #include "hw/net/cadence_gem.h"
 #include "hw/rtc/xlnx-zynqmp-rtc.h"
@@ -63,6 +64,8 @@ struct Versal {
             ARMCPU cpu[XLNX_VERSAL_NR_ACPUS];
             GICv3State gic;
         } apu;
+
+        SMMU500State smmu;
     } fpd;
 
     MemoryRegion mr_ps;
@@ -161,6 +164,7 @@ struct Versal {
 #define VERSAL_PMC_APB_IRQ         121
 #define VERSAL_OSPI_IRQ            124
 #define VERSAL_SD0_IRQ_0           126
+#define VERSAL_SMMU_IRQ            139
 #define VERSAL_EFUSE_IRQ           171
 #define VERSAL_TRNG_IRQ            173
 #define VERSAL_RTC_ALARM_IRQ       174
@@ -230,6 +234,9 @@ struct Versal {
 #define MM_FPD_CRF_SIZE             0x140000
 #define MM_FPD_FPD_APU              0xfd5c0000
 #define MM_FPD_FPD_APU_SIZE         0x100
+
+#define MM_FPD_SMMU                 0xfd800000U
+#define MM_FPD_SMMU_SIZE            0x40000
 
 #define MM_PMC_PMC_IOU_SLCR         0xf1060000
 #define MM_PMC_PMC_IOU_SLCR_SIZE    0x10000

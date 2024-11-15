@@ -48,6 +48,7 @@ struct VersalVirt {
         uint32_t usb;
         uint32_t dwc;
         uint32_t canfd[2];
+        uint32_t smmu;
     } phandle;
     struct arm_boot_info binfo;
 
@@ -79,6 +80,7 @@ static void fdt_create(VersalVirt *s)
 
     s->phandle.usb = qemu_fdt_alloc_phandle(s->fdt);
     s->phandle.dwc = qemu_fdt_alloc_phandle(s->fdt);
+    s->phandle.smmu = qemu_fdt_alloc_phandle(s->fdt);
     /* Create /chosen node for load_dtb.  */
     qemu_fdt_add_subnode(s->fdt, "/chosen");
 
@@ -145,6 +147,23 @@ static void fdt_add_gic_nodes(VersalVirt *s)
     qemu_fdt_setprop_cell(s->fdt, nodename, "#interrupt-cells", 3);
     qemu_fdt_setprop_string(s->fdt, nodename, "compatible", "arm,gic-v3");
     g_free(nodename);
+}
+
+static void fdt_add_smmu_nodes(VersalVirt *s)
+{
+    char *node;
+    const char compat[] = "arm,smmuv2";
+
+    node = g_strdup_printf("/smmu@%" PRIx32, MM_FPD_SMMU);
+    qemu_fdt_add_subnode(s->fdt, node);
+    qemu_fdt_setprop(s->fdt, node, "compatible", compat, sizeof(compat));
+    qemu_fdt_setprop_sized_cells(s->fdt, node, "reg",
+                                 2, MM_FPD_SMMU,
+                                 2, MM_FPD_SMMU_SIZE);
+    qemu_fdt_setprop_cells(s->fdt, node, "interrupts",
+            GIC_FDT_IRQ_TYPE_SPI, VERSAL_SMMU_IRQ, GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+    qemu_fdt_setprop_cell(s->fdt, node, "phandle", s->phandle.smmu);
+    g_free(node);
 }
 
 static void fdt_add_timer_nodes(VersalVirt *s)
@@ -710,6 +729,7 @@ static void versal_virt_init(MachineState *machine)
     fdt_add_uart_nodes(s);
     fdt_add_canfd_nodes(s);
     fdt_add_gic_nodes(s);
+    fdt_add_smmu_nodes(s);
     fdt_add_timer_nodes(s);
     fdt_add_zdma_nodes(s);
     fdt_add_usb_xhci_nodes(s);
