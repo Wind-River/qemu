@@ -314,7 +314,7 @@ static const VersalMap VERSAL_MAP = {
     .usb[0] = { .xhci = 0xfe200000, .ctrl = 0xff9d0000, .irq = 22 },
     .num_usb = 1,
 
-    .efuse = { .ctrl = 0xf1240000, .cache = 0xf1250000, .irq = 139 },
+    .efuse = { .ctrl = 0xf1240000, .cache = 0xf1250000, .irq = 171 },
 
     .ospi = {
         .ctrl = 0xf1010000,
@@ -325,10 +325,10 @@ static const VersalMap VERSAL_MAP = {
 
     .pmc_iou_slcr = { 0xf1060000, OR_IRQ(121, 0) },
     .bbram = { 0xf11f0000, OR_IRQ(121, 1) },
-    .trng = { 0xf1230000, 141 },
+    .trng = { 0xf1230000, 173 },
     .rtc = {
         { 0xf12a0000, OR_IRQ(121, 2) },
-        .alarm_irq = 142, .second_irq = 143
+        .alarm_irq = 174, .second_irq = 175
     },
 
     .cfu = {
