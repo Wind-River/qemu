@@ -161,10 +161,10 @@ struct Versal {
 #define VERSAL_PMC_APB_IRQ         121
 #define VERSAL_OSPI_IRQ            124
 #define VERSAL_SD0_IRQ_0           126
-#define VERSAL_EFUSE_IRQ           139
-#define VERSAL_TRNG_IRQ            141
-#define VERSAL_RTC_ALARM_IRQ       142
-#define VERSAL_RTC_SECONDS_IRQ     143
+#define VERSAL_EFUSE_IRQ           171
+#define VERSAL_TRNG_IRQ            173
+#define VERSAL_RTC_ALARM_IRQ       174
+#define VERSAL_RTC_SECONDS_IRQ     175
 
 /* Architecturally reserved IRQs suitable for virtualization.  */
 #define VERSAL_RSVD_IRQ_FIRST 111
