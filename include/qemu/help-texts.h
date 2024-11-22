@@ -10,6 +10,6 @@
 #define QEMU_HELP_BOTTOM \
     "See <https://qemu.org/contribute/report-a-bug> for how to report bugs.\n" \
     "More information on the QEMU project at <https://qemu.org>." \
-    "\nMore information on Wind River QEMU at <http://github.com/Wind-River/qemu"
+    "\nMore information on Wind River QEMU at <http://github.com/Wind-River/qemu>."
 
 #endif
