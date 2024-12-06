@@ -102,6 +102,7 @@ system_ss.add(when: 'CONFIG_XLNX_VERSAL', if_true: files(
   'xlnx-versal-cfu.c',
   'xlnx-cfi-if.c',
   'xlnx-versal-cframe-reg.c',
+  'xlnx-versal-lpd-iou-slcr.c',
 ))
 system_ss.add(when: 'CONFIG_XLNX_VERSAL_TRNG', if_true: files(
   'xlnx-versal-trng.c',
