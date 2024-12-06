@@ -390,6 +390,21 @@ static void versal_create_trng(Versal *s, qemu_irq *pic)
     sysbus_connect_irq(sbd, 0, pic[VERSAL_TRNG_IRQ]);
 }
 
+static void versal_create_intlpd_csr(Versal *s)
+{
+    SysBusDevice *sbd;
+    MemoryRegion *mr;
+
+    object_initialize_child(OBJECT(s), "lpd_int_csr", &s->lpd.int_csr,
+                            TYPE_XILINX_INTLPD_CONFIG);
+    sbd = SYS_BUS_DEVICE(&s->lpd.int_csr);
+    sysbus_realize(sbd, &error_fatal);
+
+    mr = sysbus_mmio_get_region(sbd, 0);
+
+    memory_region_add_subregion(&s->mr_ps, MM_LPD_INT_CSR, mr);
+}
+
 static void versal_create_xrams(Versal *s, qemu_irq *pic)
 {
     int nr_xrams = ARRAY_SIZE(s->lpd.xram.ctrl);
@@ -974,6 +989,7 @@ static void versal_realize(DeviceState *dev, Error **errp)
     versal_create_pmc_apb_irq_orgate(s, pic);
     versal_create_rtc(s, pic);
     versal_create_trng(s, pic);
+    versal_create_intlpd_csr(s);
     versal_create_xrams(s, pic);
     versal_create_bbram(s, pic);
     versal_create_efuse(s, pic);

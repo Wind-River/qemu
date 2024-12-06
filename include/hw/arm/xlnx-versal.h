@@ -24,6 +24,7 @@
 #include "hw/rtc/xlnx-zynqmp-rtc.h"
 #include "qom/object.h"
 #include "hw/usb/xlnx-usb-subsystem.h"
+#include "hw/misc/xlnx-versal-intlpd-config.h"
 #include "hw/misc/xlnx-versal-xramc.h"
 #include "hw/nvram/xlnx-bbram.h"
 #include "hw/nvram/xlnx-versal-efuse.h"
@@ -106,6 +107,7 @@ struct Versal {
 
         XlnxVersalCRL crl;
         LPD_SLCR slcr;
+        INTLPD_CONFIG int_csr;
     } lpd;
 
     /* The Platform Management Controller subsystem.  */
@@ -209,6 +211,8 @@ struct Versal {
 
 #define MM_OCM                      0xfffc0000U
 #define MM_OCM_SIZE                 0x40000
+
+#define MM_LPD_INT_CSR              0xfe600000
 
 #define MM_XRAM                     0xfe800000
 #define MM_XRAMC                    0xff8e0000
