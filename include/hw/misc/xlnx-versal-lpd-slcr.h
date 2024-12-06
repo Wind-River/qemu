@@ -25,7 +25,7 @@
 #include "hw/register.h"
 #include "qom/object.h"
 
-#define TYPE_XILINX_LPD_SLCR "xlnx,versal-lpd-slcr"
+#define TYPE_XILINX_LPD_SLCR "xlnx.versal-lpd-slcr"
 
 #define XILINX_LPD_SLCR(obj) \
      OBJECT_CHECK(LPD_SLCR, (obj), TYPE_XILINX_LPD_SLCR)
