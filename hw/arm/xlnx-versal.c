@@ -821,6 +821,21 @@ static void versal_create_lpd_iou_slcr(Versal *s)
     memory_region_add_subregion(&s->mr_ps, MM_LPD_IOU_SLCR, mr);
 }
 
+static void versal_create_lpd_slcr(Versal *s)
+{
+    SysBusDevice *sbd;
+    MemoryRegion *mr;
+
+    object_initialize_child(OBJECT(s), "lpd_slcr", &s->lpd.slcr,
+                            TYPE_XILINX_LPD_SLCR);
+    sbd = SYS_BUS_DEVICE(&s->lpd.slcr);
+    sysbus_realize(sbd, &error_fatal);
+
+    mr = sysbus_mmio_get_region(sbd, 0);
+
+    memory_region_add_subregion(&s->mr_ps, MM_LPD_SLCR, mr);
+}
+
 /* This takes the board allocated linear DDR memory and creates aliases
  * for each split DDR range/aperture on the Versal address map.
  */
@@ -964,6 +979,7 @@ static void versal_realize(DeviceState *dev, Error **errp)
     versal_create_efuse(s, pic);
     versal_create_pmc_iou_slcr(s, pic);
     versal_create_ospi(s, pic);
+    versal_create_lpd_slcr(s);
     versal_create_crl(s, pic);
     versal_create_cfu(s, pic);
     versal_map_ddr(s);

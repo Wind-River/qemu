@@ -29,6 +29,7 @@
 #include "hw/nvram/xlnx-versal-efuse.h"
 #include "hw/ssi/xlnx-versal-ospi.h"
 #include "hw/dma/xlnx_csu_dma.h"
+#include "hw/misc/xlnx-versal-lpd-slcr.h"
 #include "hw/misc/xlnx-versal-crl.h"
 #include "hw/misc/xlnx-versal-pmc-iou-slcr.h"
 #include "hw/misc/xlnx-versal-trng.h"
@@ -104,6 +105,7 @@ struct Versal {
         } xram;
 
         XlnxVersalCRL crl;
+        LPD_SLCR slcr;
     } lpd;
 
     /* The Platform Management Controller subsystem.  */
@@ -227,6 +229,8 @@ struct Versal {
 
 #define MM_PSM_START                0xffc80000U
 #define MM_PSM_END                  0xffd00000U
+
+#define MM_LPD_SLCR                 0xff410000U
 
 #define MM_CRL                      0xff5e0000U
 #define MM_CRL_SIZE                 0x300000
