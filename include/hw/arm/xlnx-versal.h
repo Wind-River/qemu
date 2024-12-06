@@ -32,6 +32,7 @@
 #include "hw/misc/xlnx-versal-crl.h"
 #include "hw/misc/xlnx-versal-pmc-iou-slcr.h"
 #include "hw/misc/xlnx-versal-trng.h"
+#include "hw/misc/xlnx-versal-lpd-iou-slcr.h"
 #include "hw/net/xlnx-versal-canfd.h"
 #include "hw/misc/xlnx-versal-cfu.h"
 #include "hw/misc/xlnx-versal-cframe-reg.h"
@@ -85,6 +86,7 @@ struct Versal {
             VersalUsb2 usb;
             CanBusState *canbus[XLNX_VERSAL_NR_CANFD];
             XlnxVersalCANFDState canfd[XLNX_VERSAL_NR_CANFD];
+            LPD_IOU_SLCR slcr;
         } iou;
 
         /* Real-time Processing Unit.  */
@@ -190,6 +192,8 @@ struct Versal {
 #define MM_CANFD0_SIZE              0x10000
 #define MM_CANFD1                   0xff070000U
 #define MM_CANFD1_SIZE              0x10000
+
+#define MM_LPD_IOU_SLCR             0xff080000U
 
 #define MM_GEM0                     0xff0c0000U
 #define MM_GEM0_SIZE                0x10000

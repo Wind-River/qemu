@@ -806,6 +806,21 @@ static void versal_create_smmu(Versal *s, qemu_irq *pic)
     sysbus_connect_irq(sbd, 0, pic[VERSAL_SMMU_IRQ]);
 }
 
+static void versal_create_lpd_iou_slcr(Versal *s)
+{
+    SysBusDevice *sbd;
+    MemoryRegion *mr;
+
+    object_initialize_child(OBJECT(s), "lpd_iou_slcr", &s->lpd.iou.slcr,
+                            TYPE_XLNX_LPD_IOU_SLCR);
+    sbd = SYS_BUS_DEVICE(&s->lpd.iou.slcr);
+    sysbus_realize(sbd, &error_fatal);
+
+    mr = sysbus_mmio_get_region(sbd, 0);
+
+    memory_region_add_subregion(&s->mr_ps, MM_LPD_IOU_SLCR, mr);
+}
+
 /* This takes the board allocated linear DDR memory and creates aliases
  * for each split DDR range/aperture on the Versal address map.
  */
@@ -937,6 +952,7 @@ static void versal_realize(DeviceState *dev, Error **errp)
     versal_create_canfds(s, pic);
     versal_create_smmu(s, pic);
     versal_create_usbs(s, pic);
+    versal_create_lpd_iou_slcr(s);
     versal_create_gems(s, pic);
     versal_create_admas(s, pic);
     versal_create_sds(s, pic);
