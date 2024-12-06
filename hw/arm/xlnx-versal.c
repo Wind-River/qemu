@@ -35,6 +35,7 @@
 #include "hw/nvram/xlnx-versal-efuse.h"
 #include "hw/ssi/xlnx-versal-ospi.h"
 #include "hw/misc/xlnx-versal-pmc-iou-slcr.h"
+#include "hw/misc/xlnx-versal-lpd-iou-slcr.h"
 #include "hw/nvram/xlnx-bbram.h"
 #include "hw/misc/xlnx-versal-trng.h"
 #include "hw/rtc/xlnx-zynqmp-rtc.h"
@@ -179,6 +180,8 @@ typedef struct VersalMap {
 
     VersalSimplePeriphMap smmu;
 
+    uint64_t lpd_iou_slcr;
+
     struct VersalEfuseMap {
         uint64_t ctrl;
         uint64_t cache;
@@ -318,6 +321,8 @@ static const VersalMap VERSAL_MAP = {
     .num_usb = 1,
 
     .smmu = { 0xfd800000, 139 },
+
+    .lpd_iou_slcr = 0xff080000,
 
     .efuse = { .ctrl = 0xf1240000, .cache = 0xf1250000, .irq = 171 },
 
@@ -1755,6 +1760,20 @@ static void versal_create_smmu(Versal *s, const VersalSimplePeriphMap *map)
                            GIC_FDT_IRQ_FLAGS_LEVEL_HI);
 }
 
+static void versal_create_lpd_iou_slcr(Versal *s, uint64_t addr)
+{
+    DeviceState *dev;
+    SysBusDevice *sbd;
+
+    dev = qdev_new(TYPE_XLNX_LPD_IOU_SLCR);
+    object_property_add_child(OBJECT(s), "lpd_iou_slcr", OBJECT(dev));
+    sbd = SYS_BUS_DEVICE(dev);
+    sysbus_realize_and_unref(sbd, &error_fatal);
+
+    memory_region_add_subregion(&s->mr_ps, addr,
+                                sysbus_mmio_get_region(sbd, 0));
+}
+
 /*
  * This takes the board allocated linear DDR memory and creates aliases
  * for each split DDR range/aperture on the Versal address map.
@@ -1971,6 +1990,10 @@ static void versal_realize_common(Versal *s)
 
     if (map->smmu.addr) {
         versal_create_smmu(s, &map->smmu);
+    }
+
+    if (map->lpd_iou_slcr) {
+        versal_create_lpd_iou_slcr(s, map->lpd_iou_slcr);
     }
 
     versal_create_efuse(s, &map->efuse);
