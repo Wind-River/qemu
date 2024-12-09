@@ -615,6 +615,7 @@ REG32(INT_PMC_PARITY_EXIT_STATUS, 0xa8)
     FIELD(INT_PMC_PARITY_EXIT_STATUS, SNGL_PERR_IF_NOC_PMC_AXI0, 0, 1)
 REG32(MISC_CONTROL, 0xac)
     FIELD(MISC_CONTROL, XMPU_ALIGN_CFG, 0, 1)
+/*
 REG32(PMC_DAP_TAP_APB, 0x10000)
     FIELD(PMC_DAP_TAP_APB, RAW_RST_N, 4, 1)
     FIELD(PMC_DAP_TAP_APB, POWER_IDLEREQ, 3, 1)
@@ -742,8 +743,9 @@ REG32(PMC_IOU_AXI, 0x240000)
     FIELD(PMC_IOU_AXI, POWER_IDLEACK, 2, 1)
     FIELD(PMC_IOU_AXI, POWER_IDLE, 1, 1)
     FIELD(PMC_IOU_AXI, MAINEXTEN, 0, 1)
+*/
 
-G_STATIC_ASSERT(PMC_INT_REGS_R_MAX == (R_PMC_IOU_AXI + 1));
+G_STATIC_ASSERT(PMC_INT_REGS_R_MAX == (R_MISC_CONTROL + 1));
 
 static void int_pmc_timeout_imr_update_irq(PMC_INT_REGS *s)
 {
@@ -1048,6 +1050,7 @@ static const RegisterAccessInfo pmc_int_regs_regs_info[] = {
         .w1c = 0xffffffff,
     },{ .name = "MISC_CONTROL",  .addr = A_MISC_CONTROL,
         .rsvd = 0xfffffffe,
+/*
     },{ .name = "PMC_DAP_TAP_APB",  .addr = A_PMC_DAP_TAP_APB,
         .reset = 0x16,
         .rsvd = 0xffffffe0,
@@ -1122,6 +1125,7 @@ static const RegisterAccessInfo pmc_int_regs_regs_info[] = {
         .reset = 0x16,
         .rsvd = 0xffffffe0,
         .ro = 0x6,
+*/
     }
 };
 
