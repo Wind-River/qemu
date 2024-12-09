@@ -815,6 +815,21 @@ static void versal_create_crl(Versal *s, qemu_irq *pic)
     sysbus_connect_irq(sbd, 0, pic[VERSAL_CRL_IRQ]);
 }
 
+static void versal_create_pmcint(Versal *s)
+{
+    SysBusDevice *sbd;
+    MemoryRegion *mr;
+
+    object_initialize_child(OBJECT(s), "pmc-int", &s->pmc.pmcint,
+                            TYPE_XILINX_PMC_INT_REGS);
+    sbd = SYS_BUS_DEVICE(&s->pmc.pmcint);
+    sysbus_realize(sbd, &error_fatal);
+
+    mr = sysbus_mmio_get_region(sbd, 0);
+
+    memory_region_add_subregion(&s->mr_ps, MM_PMC_INT_CSR, mr);
+}
+
 static void versal_create_smmu(Versal *s, qemu_irq *pic)
 {
     SysBusDevice *sbd;
@@ -1008,6 +1023,7 @@ static void versal_realize(DeviceState *dev, Error **errp)
     versal_create_lpd_slcr(s);
     versal_create_crl(s, pic);
     versal_create_cfu(s, pic);
+    versal_create_pmcint(s);
     versal_map_ddr(s);
     versal_unimp(s);
 
