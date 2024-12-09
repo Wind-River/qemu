@@ -38,6 +38,7 @@
 #include "hw/misc/xlnx-versal-lpd-iou-slcr.h"
 #include "hw/misc/xlnx-versal-lpd-slcr.h"
 #include "hw/misc/xlnx-versal-intlpd-config.h"
+#include "hw/misc/xlnx-versal-pmc-int.h"
 #include "hw/nvram/xlnx-bbram.h"
 #include "hw/misc/xlnx-versal-trng.h"
 #include "hw/rtc/xlnx-zynqmp-rtc.h"
@@ -185,6 +186,7 @@ typedef struct VersalMap {
     uint64_t lpd_iou_slcr;
     uint64_t lpd_slcr;
     uint64_t lpd_int_csr;
+    uint64_t pmc_int_csr;
 
     struct VersalEfuseMap {
         uint64_t ctrl;
@@ -331,6 +333,8 @@ static const VersalMap VERSAL_MAP = {
     .lpd_slcr = 0xff410000,
 
     .lpd_int_csr = 0xfe600000,
+
+    .pmc_int_csr = 0xf1330000,
 
     .efuse = { .ctrl = 0xf1240000, .cache = 0xf1250000, .irq = 171 },
 
@@ -1588,6 +1592,20 @@ static DeviceState *versal_create_ospi(Versal *s,
     return dev;
 }
 
+static void versal_create_pmcint(Versal *s, uint64_t addr)
+{
+    DeviceState *dev;
+    SysBusDevice *sbd;
+
+    dev = qdev_new(TYPE_XILINX_PMC_INT_REGS);
+    object_property_add_child(OBJECT(s), "pmc-int", OBJECT(dev));
+    sbd = SYS_BUS_DEVICE(dev);
+    sysbus_realize_and_unref(sbd, &error_fatal);
+
+    memory_region_add_subregion(&s->mr_ps, addr,
+                                sysbus_mmio_get_region(sbd, 0));
+}
+
 static void versal_create_cfu(Versal *s, const struct VersalCfuMap *map)
 {
     SysBusDevice *sbd;
@@ -2038,6 +2056,10 @@ static void versal_realize_common(Versal *s)
 
     if (map->lpd_int_csr) {
         versal_create_intlpd_csr(s, map->lpd_int_csr);
+    }
+
+    if (map->pmc_int_csr) {
+        versal_create_pmcint(s, map->pmc_int_csr);
     }
 
     versal_create_efuse(s, &map->efuse);
