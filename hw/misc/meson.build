@@ -106,6 +106,7 @@ system_ss.add(when: 'CONFIG_XLNX_VERSAL', if_true: files(
   'xlnx-versal-lpd-slcr.c',
   'xlnx-serbs.c',
   'xlnx-versal-intlpd-config.c',
+  'xlnx-versal-pmc-int.c',
 ))
 system_ss.add(when: 'CONFIG_XLNX_VERSAL_TRNG', if_true: files(
   'xlnx-versal-trng.c',
