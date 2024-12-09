@@ -35,6 +35,7 @@
 #include "hw/misc/xlnx-versal-pmc-iou-slcr.h"
 #include "hw/misc/xlnx-versal-trng.h"
 #include "hw/misc/xlnx-versal-lpd-iou-slcr.h"
+#include "hw/misc/xlnx-versal-pmc-int.h"
 #include "hw/net/xlnx-versal-canfd.h"
 #include "hw/misc/xlnx-versal-cfu.h"
 #include "hw/misc/xlnx-versal-cframe-reg.h"
@@ -136,6 +137,7 @@ struct Versal {
         XlnxVersalCFUSFR cfu_sfr;
         XlnxVersalCFrameReg cframe[XLNX_VERSAL_NR_CFRAME];
         XlnxVersalCFrameBcastReg cframe_bcast;
+        PMC_INT_REGS pmcint;
 
         OrIRQState apb_irq_orgate;
     } pmc;
@@ -353,4 +355,6 @@ struct Versal {
 #define MM_PMC_RTC_SIZE             0x10000
 #define MM_PMC_TRNG                 0xf1230000
 #define MM_PMC_TRNG_SIZE            0x10000
+
+#define MM_PMC_INT_CSR              0xf1330000
 #endif
