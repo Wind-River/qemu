@@ -26,9 +26,7 @@
 #include "qom/object.h"
 
 #define TYPE_XILINX_LPD_SLCR "xlnx.versal-lpd-slcr"
-
-#define XILINX_LPD_SLCR(obj) \
-     OBJECT_CHECK(LPD_SLCR, (obj), TYPE_XILINX_LPD_SLCR)
+OBJECT_DECLARE_SIMPLE_TYPE(LPD_SLCR, XILINX_LPD_SLCR)
 
 #define LPD_SLCR_R_MAX 83
 
