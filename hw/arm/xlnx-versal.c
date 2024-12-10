@@ -1805,7 +1805,7 @@ static void versal_create_lpd_iou_slcr(Versal *s, uint64_t addr)
     DeviceState *dev;
     SysBusDevice *sbd;
 
-    dev = qdev_new(TYPE_XLNX_LPD_IOU_SLCR);
+    dev = qdev_new(TYPE_XILINX_LPD_IOU_SLCR);
     object_property_add_child(OBJECT(s), "lpd_iou_slcr", OBJECT(dev));
     sbd = SYS_BUS_DEVICE(dev);
     sysbus_realize_and_unref(sbd, &error_fatal);
