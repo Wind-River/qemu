@@ -24,12 +24,9 @@
 
 #include "qom/object.h"
 
-#define TYPE_XLNX_LPD_IOU_SLCR "xlnx.versal-lpd-iou-slcr"
+#define TYPE_XILINX_LPD_IOU_SLCR "xlnx.versal-lpd-iou-slcr"
 
-OBJECT_DECLARE_SIMPLE_TYPE(LPD_IOU_SLCR, XLNX_LPD_IOU_SLCR)
-
-#define XILINX_LPD_IOU_SLCR(obj) \
-     OBJECT_CHECK(LPD_IOU_SLCR, (obj), TYPE_XLNX_LPD_IOU_SLCR)
+OBJECT_DECLARE_SIMPLE_TYPE(LPD_IOU_SLCR, XILINX_LPD_IOU_SLCR)
 
 #define LPD_IOU_SLCR_R_MAX 459
 

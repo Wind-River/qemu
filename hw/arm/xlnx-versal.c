@@ -842,7 +842,7 @@ static void versal_create_lpd_iou_slcr(Versal *s)
     MemoryRegion *mr;
 
     object_initialize_child(OBJECT(s), "lpd_iou_slcr", &s->lpd.iou.slcr,
-                            TYPE_XLNX_LPD_IOU_SLCR);
+                            TYPE_XILINX_LPD_IOU_SLCR);
     sbd = SYS_BUS_DEVICE(&s->lpd.iou.slcr);
     sysbus_realize(sbd, &error_fatal);
 
