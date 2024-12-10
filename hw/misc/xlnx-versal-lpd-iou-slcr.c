@@ -685,7 +685,7 @@ static void lpd_iou_slcr_init(Object *obj)
     SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
     RegisterInfoArray *reg_array;
 
-    memory_region_init(&s->iomem, obj, TYPE_XLNX_LPD_IOU_SLCR, LPD_IOU_SLCR_R_MAX * 4);
+    memory_region_init(&s->iomem, obj, TYPE_XILINX_LPD_IOU_SLCR, LPD_IOU_SLCR_R_MAX * 4);
     reg_array =
         register_init_block32(DEVICE(obj), lpd_iou_slcr_regs_info,
                               ARRAY_SIZE(lpd_iou_slcr_regs_info),
@@ -702,7 +702,7 @@ static void lpd_iou_slcr_init(Object *obj)
 }
 
 static const VMStateDescription vmstate_lpd_iou_slcr = {
-    .name = TYPE_XLNX_LPD_IOU_SLCR,
+    .name = TYPE_XILINX_LPD_IOU_SLCR,
     .version_id = 1,
     .minimum_version_id = 1,
     .fields = (VMStateField[]) {
@@ -721,7 +721,7 @@ static void lpd_iou_slcr_class_init(ObjectClass *klass, void *data)
 }
 
 static const TypeInfo lpd_iou_slcr_info = {
-    .name          = TYPE_XLNX_LPD_IOU_SLCR,
+    .name          = TYPE_XILINX_LPD_IOU_SLCR,
     .parent        = TYPE_SYS_BUS_DEVICE,
     .instance_size = sizeof(LPD_IOU_SLCR),
     .class_init    = lpd_iou_slcr_class_init,
