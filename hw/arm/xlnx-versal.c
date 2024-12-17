@@ -1197,8 +1197,18 @@ static void versal_create_gem(Versal *s,
     object_property_set_int(OBJECT(dev), "num-priority-queues",
                             map->num_prio_queue, &error_abort);
 
-    object_property_set_link(OBJECT(dev), "dma", OBJECT(&s->mr_ps),
-                             &error_abort);
+    {
+        Object *smmu_obj = versal_get_child(s, "mmu-500");
+        if (smmu_obj) {
+            SMMU500State *smmu = XILINX_SMMU500(smmu_obj);
+            object_property_set_link(OBJECT(dev), "dma",
+                                     OBJECT(&smmu->tbu[0].iommu),
+                                     &error_abort);
+        } else {
+            object_property_set_link(OBJECT(dev), "dma", OBJECT(&s->mr_ps),
+                                     &error_abort);
+        }
+    }
     sysbus_realize_and_unref(SYS_BUS_DEVICE(dev), &error_fatal);
 
     mr = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 0);
@@ -1787,6 +1797,8 @@ static void versal_create_smmu(Versal *s, const VersalSimplePeriphMap *map)
     dev = qdev_new(TYPE_XILINX_SMMU500);
     object_property_add_child(OBJECT(s), "mmu-500", OBJECT(dev));
     sbd = SYS_BUS_DEVICE(dev);
+    object_property_set_link(OBJECT(dev), "dma", OBJECT(&s->mr_ps),
+                             &error_abort);
     sysbus_realize_and_unref(sbd, &error_fatal);
 
     mr = sysbus_mmio_get_region(sbd, 0);
