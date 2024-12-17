@@ -275,7 +275,7 @@ static void versal_create_gems(Versal *s, qemu_irq *pic)
         qdev_realize(DEVICE(or_irq), NULL, &error_fatal);
         qdev_connect_gpio_out(DEVICE(or_irq), 0, pic[irqs[i]]);
 
-        object_property_set_link(OBJECT(dev), "dma", OBJECT(&s->mr_ps),
+        object_property_set_link(OBJECT(dev), "dma", OBJECT(&s->fpd.smmu.tbu[0].iommu),
                                  &error_abort);
         sysbus_realize(SYS_BUS_DEVICE(dev), &error_fatal);
 
@@ -838,6 +838,8 @@ static void versal_create_smmu(Versal *s, qemu_irq *pic)
     object_initialize_child(OBJECT(s), "mmu-500", &s->fpd.smmu,
                             TYPE_XILINX_SMMU500);
     sbd = SYS_BUS_DEVICE(&s->fpd.smmu);
+    object_property_set_link(OBJECT(sbd), "dma", OBJECT(&s->mr_ps),
+                             &error_abort);
     sysbus_realize(sbd, &error_fatal);
 
     mr = sysbus_mmio_get_region(sbd, 0);

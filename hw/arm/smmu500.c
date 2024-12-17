@@ -1660,7 +1660,7 @@ static IOMMUTLBEntry smmu_translate(IOMMUMemoryRegion *mr, hwaddr addr,
     TBU *tbu = container_of(mr, TBU, iommu);
     SMMU500State *s = tbu->smmu;
     IOMMUTLBEntry ret = {
-        .target_as = tbu->as,
+        .target_as = &address_space_memory,
         .translated_addr = addr,
         .addr_mask = (1ULL << 12) - 1,
         .perm = IOMMU_RW,
@@ -2216,13 +2216,11 @@ static void smmu500_init(Object *obj)
         char *name = g_strdup_printf("smmu-tbu%d", i);
 
         s->tbu[i].as = g_new0(AddressSpace, 1);
+        /* s->tbu[i].as is initialized by the device connected to s->tbu[i] */
         memory_region_init_iommu(&s->tbu[i].iommu, sizeof(s->tbu[i].iommu),
                                  TYPE_XILINX_SMMU500_IOMMU_MEMORY_REGION,
                                  OBJECT(sbd),
                                  name, UINT64_MAX);
-        address_space_init(s->tbu[i].as,
-                           MEMORY_REGION(&s->tbu[i].iommu),
-                           name);
         g_free(name);
         s->tbu[i].smmu = s;
     }
