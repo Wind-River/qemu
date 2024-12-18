@@ -1660,7 +1660,7 @@ static IOMMUTLBEntry smmu_translate(IOMMUMemoryRegion *mr, hwaddr addr,
     TBU *tbu = container_of(mr, TBU, iommu);
     SMMU500State *s = tbu->smmu;
     IOMMUTLBEntry ret = {
-        .target_as = &address_space_memory,
+        .target_as = tbu->target_as,
         .translated_addr = addr,
         .addr_mask = (1ULL << 12) - 1,
         .perm = IOMMU_RW,
@@ -2199,12 +2199,30 @@ static void smmu500_realize(DeviceState *dev, Error **errp)
     for (i = 0; i < s->cfg.num_cb; i++) {
         sysbus_init_irq(SYS_BUS_DEVICE(dev), &s->irq.context[i]);
     }
+
+    for (i = 0; i < MAX_TBU && s->tbu[i].target_mr; i++) {
+        char *name = g_strdup_printf("smmu-tbu%d", i);
+
+        s->tbu[i].target_as = g_new0(AddressSpace, 1);
+        address_space_init(s->tbu[i].target_as, s->tbu[i].target_mr, NULL);
+        memory_region_init_iommu(&s->tbu[i].iommu, sizeof(s->tbu[i].iommu),
+                                 TYPE_XILINX_SMMU500_IOMMU_MEMORY_REGION,
+                                 OBJECT(sbd),
+                                 name, UINT64_MAX);
+        /* Devices connected to s->tbu[i] are responsible for creating and
+         * initializing the AddressSpace they use when performing DMA
+         * operations through the tbu[i].iommu IOMMUMemoryRegion
+         */
+        g_free(name);
+        s->tbu[i].smmu = s;
+    }
+
+    s->num_tbu = i;
 }
 
 static void smmu500_init(Object *obj)
 {
     SMMU500State *s = XILINX_SMMU500(obj);
-    SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
     int i;
 
     object_property_add_link(obj, "dma", TYPE_MEMORY_REGION,
@@ -2212,20 +2230,19 @@ static void smmu500_init(Object *obj)
                              qdev_prop_allow_set_link_before_realize,
                              OBJ_PROP_LINK_STRONG);
 
+    /* The mr-%d property should be set by the implementation of the machine
+     * into which the SMMU is being integrated. The index of the mr corresponds
+     * to the TBU index. Devices connected to a given TBU will have their DMA
+     * addresses translated into the target MemoryRegion as defined by this property.
+     */
     for (i = 0; i < MAX_TBU; i++) {
-        char *name = g_strdup_printf("smmu-tbu%d", i);
-
-        s->tbu[i].as = g_new0(AddressSpace, 1);
-        /* s->tbu[i].as is initialized by the device connected to s->tbu[i] */
-        memory_region_init_iommu(&s->tbu[i].iommu, sizeof(s->tbu[i].iommu),
-                                 TYPE_XILINX_SMMU500_IOMMU_MEMORY_REGION,
-                                 OBJECT(sbd),
-                                 name, UINT64_MAX);
-        g_free(name);
-        s->tbu[i].smmu = s;
+        char *name = g_strdup_printf("mr-%d", i);
+        object_property_add_link(obj, name, TYPE_MEMORY_REGION,
+                                 (Object **)&s->tbu[i].target_mr,
+                                 qdev_prop_allow_set_link_before_realize,
+                                 OBJ_PROP_LINK_STRONG);
     }
 
-    s->num_tbu = MAX_TBU;
 }
 
 static void smmu_free_rai(SMMU500State *s, RegisterAccessInfo *rai, int num)
