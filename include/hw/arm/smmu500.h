@@ -63,7 +63,8 @@ struct SMMU500State;
 typedef struct TBU {
     SMMU500State *smmu;
     IOMMUMemoryRegion iommu;
-    AddressSpace *as;
+    AddressSpace *target_as;
+    MemoryRegion *target_mr;
 } TBU;
 
 typedef struct SMMU500State {

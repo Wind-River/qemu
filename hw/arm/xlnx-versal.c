@@ -838,8 +838,7 @@ static void versal_create_smmu(Versal *s, qemu_irq *pic)
     object_initialize_child(OBJECT(s), "mmu-500", &s->fpd.smmu,
                             TYPE_XILINX_SMMU500);
     sbd = SYS_BUS_DEVICE(&s->fpd.smmu);
-    object_property_set_link(OBJECT(sbd), "dma", OBJECT(&s->mr_ps),
-                             &error_abort);
+    object_property_set_link(OBJECT(sbd), "mr-0", OBJECT(&s->mr_ps), &error_abort);
     sysbus_realize(sbd, &error_fatal);
 
     mr = sysbus_mmio_get_region(sbd, 0);
