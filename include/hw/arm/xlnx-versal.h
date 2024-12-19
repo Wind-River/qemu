@@ -358,4 +358,18 @@ struct Versal {
 #define MM_PMC_TRNG_SIZE            0x10000
 
 #define MM_PMC_INT_CSR              0xf1330000
+
+/* MMU-500 TBU device mapping
+ *
+ * It is system dependent which devices are connected to which TBU.
+ * The target DMA address space of each TBU is configured independently
+ * (see SMMU property SMMU_TBU_MR_PROP_NAME). Devices connected to the
+ * same TBU will have the same target translation address space.
+ */
+#define VERSAL_GEM0_TBUID       0x0
+#define VERSAL_GEM1_TBUID       0x0
+#define VERSAL_SMMU_TBUID_MAX   VERSAL_GEM1_TBUID + 1
+
+G_STATIC_ASSERT(VERSAL_SMMU_TBUID_MAX <= MAX_TBU);
+
 #endif
