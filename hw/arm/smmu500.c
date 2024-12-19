@@ -2230,19 +2230,19 @@ static void smmu500_init(Object *obj)
                              qdev_prop_allow_set_link_before_realize,
                              OBJ_PROP_LINK_STRONG);
 
-    /* The mr-%d property should be set by the implementation of the machine
-     * into which the SMMU is being integrated. The index of the mr corresponds
-     * to the TBU index. Devices connected to a given TBU will have their DMA
-     * addresses translated into the target MemoryRegion as defined by this property.
+    /* The SMMU_TBU_MR_PROP_NAME property should be set by the implementation
+     * of the machine into which the SMMU is being integrated. The index of the
+     * mr corresponds to the TBU index. Devices connected to a given TBU will
+     * have their DMA addresses translated into the target MemoryRegion as
+     * defined by this property.
      */
     for (i = 0; i < MAX_TBU; i++) {
-        char *name = g_strdup_printf("mr-%d", i);
+        char *name = g_strdup_printf(SMMU_TBU_MR_PROP_NAME, i);
         object_property_add_link(obj, name, TYPE_MEMORY_REGION,
                                  (Object **)&s->tbu[i].target_mr,
                                  qdev_prop_allow_set_link_before_realize,
                                  OBJ_PROP_LINK_STRONG);
     }
-
 }
 
 static void smmu_free_rai(SMMU500State *s, RegisterAccessInfo *rai, int num)
