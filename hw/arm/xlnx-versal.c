@@ -972,6 +972,27 @@ static DeviceState *versal_create_cpu(Versal *s,
     return cpu;
 }
 
+#define VERSAL_GEM0_TBUID       0x0
+#define VERSAL_GEM1_TBUID       0x0
+#define VERSAL_SMMU_TBUID_MAX   (VERSAL_GEM1_TBUID + 1)
+
+static void versal_connect_dev_iommu(Versal *s,
+                                     DeviceState *dev,
+                                     const char *propname,
+                                     int tbuId)
+{
+    Object *smmu_obj = versal_get_child(s, "mmu-500");
+    if (smmu_obj) {
+        SMMU500State *smmu = XILINX_SMMU500(smmu_obj);
+        object_property_set_link(OBJECT(dev), propname,
+                                 OBJECT(&smmu->tbu[tbuId].iommu),
+                                 &error_abort);
+    } else {
+        object_property_set_link(OBJECT(dev), propname,
+                                 OBJECT(&s->mr_ps), &error_abort);
+    }
+}
+
 static void versal_create_cpu_cluster(Versal *s, const VersalCpuClusterMap *map)
 {
     size_t i, j;
@@ -1197,18 +1218,7 @@ static void versal_create_gem(Versal *s,
     object_property_set_int(OBJECT(dev), "num-priority-queues",
                             map->num_prio_queue, &error_abort);
 
-    {
-        Object *smmu_obj = versal_get_child(s, "mmu-500");
-        if (smmu_obj) {
-            SMMU500State *smmu = XILINX_SMMU500(smmu_obj);
-            object_property_set_link(OBJECT(dev), "dma",
-                                     OBJECT(&smmu->tbu[0].iommu),
-                                     &error_abort);
-        } else {
-            object_property_set_link(OBJECT(dev), "dma", OBJECT(&s->mr_ps),
-                                     &error_abort);
-        }
-    }
+    versal_connect_dev_iommu(s, dev, "dma", VERSAL_GEM0_TBUID);
     sysbus_realize_and_unref(SYS_BUS_DEVICE(dev), &error_fatal);
 
     mr = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 0);
@@ -1793,12 +1803,17 @@ static void versal_create_smmu(Versal *s, const VersalSimplePeriphMap *map)
     MemoryRegion *mr;
     g_autofree char *node;
     const char compatible[] = "arm,smmuv2";
+    int i;
 
     dev = qdev_new(TYPE_XILINX_SMMU500);
     object_property_add_child(OBJECT(s), "mmu-500", OBJECT(dev));
     sbd = SYS_BUS_DEVICE(dev);
-    object_property_set_link(OBJECT(dev), "mr-0", OBJECT(&s->mr_ps),
-                             &error_abort);
+
+    for (i = 0; i < VERSAL_SMMU_TBUID_MAX; i++) {
+        g_autofree char *name = g_strdup_printf(SMMU_TBU_MR_PROP_NAME, i);
+        object_property_set_link(OBJECT(dev), name,
+                                 OBJECT(&s->mr_ps), &error_abort);
+    }
     sysbus_realize_and_unref(sbd, &error_fatal);
 
     mr = sysbus_mmio_get_region(sbd, 0);
