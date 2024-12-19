@@ -57,6 +57,9 @@ OBJECT_DECLARE_SIMPLE_TYPE(SMMU500State, XILINX_SMMU500)
 
 #define SMMU_R_MAX (2 * MAX_CB * SMMU_PAGESIZE)
 
+/* Per-TBU Memory Region property name */
+#define SMMU_TBU_MR_PROP_NAME   "mr-%d"
+
 /* Forward declaration */
 struct SMMU500State;
 

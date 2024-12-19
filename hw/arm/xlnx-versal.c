@@ -191,6 +191,16 @@ static void versal_create_uarts(Versal *s, qemu_irq *pic)
     }
 }
 
+static void versal_connect_dev_iommu(Versal *s,
+                                     DeviceState *dev,
+                                     const char *propname,
+                                     int tbuId)
+{
+    object_property_set_link(OBJECT(dev), propname,
+                             OBJECT(&s->fpd.smmu.tbu[tbuId].iommu),
+                             &error_abort);
+}
+
 static void versal_create_canfds(Versal *s, qemu_irq *pic)
 {
     int i;
@@ -255,6 +265,7 @@ static void versal_create_gems(Versal *s, qemu_irq *pic)
     for (i = 0; i < ARRAY_SIZE(s->lpd.iou.gem); i++) {
         static const int irqs[] = { VERSAL_GEM0_IRQ_0, VERSAL_GEM1_IRQ_0};
         static const uint64_t addrs[] = { MM_GEM0, MM_GEM1 };
+        static const int tbu_ids[] = {VERSAL_GEM0_TBUID, VERSAL_GEM1_TBUID };
         char *name = g_strdup_printf("gem%d", i);
         DeviceState *dev;
         MemoryRegion *mr;
@@ -275,8 +286,7 @@ static void versal_create_gems(Versal *s, qemu_irq *pic)
         qdev_realize(DEVICE(or_irq), NULL, &error_fatal);
         qdev_connect_gpio_out(DEVICE(or_irq), 0, pic[irqs[i]]);
 
-        object_property_set_link(OBJECT(dev), "dma", OBJECT(&s->fpd.smmu.tbu[0].iommu),
-                                 &error_abort);
+        versal_connect_dev_iommu(s, dev, "dma", tbu_ids[i]);
         sysbus_realize(SYS_BUS_DEVICE(dev), &error_fatal);
 
         mr = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 0);
@@ -834,11 +844,17 @@ static void versal_create_smmu(Versal *s, qemu_irq *pic)
 {
     SysBusDevice *sbd;
     MemoryRegion *mr;
+    int i;
 
     object_initialize_child(OBJECT(s), "mmu-500", &s->fpd.smmu,
                             TYPE_XILINX_SMMU500);
     sbd = SYS_BUS_DEVICE(&s->fpd.smmu);
-    object_property_set_link(OBJECT(sbd), "mr-0", OBJECT(&s->mr_ps), &error_abort);
+
+    for (i = 0; i < VERSAL_SMMU_TBUID_MAX; i++) {
+        char *name = g_strdup_printf(SMMU_TBU_MR_PROP_NAME, i);
+        object_property_set_link(OBJECT(sbd), name,
+                                 OBJECT(&s->mr_ps), &error_abort);
+    }
     sysbus_realize(sbd, &error_fatal);
 
     mr = sysbus_mmio_get_region(sbd, 0);
