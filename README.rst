@@ -2,30 +2,16 @@
 QEMU README
 ===========
 
-QEMU is a generic and open source machine & userspace emulator and
-virtualizer.
+Wind River QEMU has improved support for
+`VxWorks <https://www.windriver.com/products/vxworks>`_ and
+`Wind River Helix Virtualization Platform <https://www.windriver.com/products/helix>`_.
+This is a fork of the community QEMU project, rebased on the
+latest stable upstream branch. For more information
+about Wind River QEMU, please `contact us`_.
 
-QEMU is capable of emulating a complete machine in software without any
-need for hardware virtualization support. By using dynamic translation,
-it achieves very good performance. QEMU can also integrate with the Xen
-and KVM hypervisors to provide emulated hardware while allowing the
-hypervisor to manage the CPU. With hypervisor support, QEMU can achieve
-near native performance for CPUs. When QEMU emulates CPUs directly it is
-capable of running operating systems made for one machine (e.g. an ARMv7
-board) on a different machine (e.g. an x86_64 PC board).
-
-QEMU is also capable of providing userspace API virtualization for Linux
-and BSD kernel interfaces. This allows binaries compiled against one
-architecture ABI (e.g. the Linux PPC64 ABI) to be run on a host using a
-different architecture ABI (e.g. the Linux x86_64 ABI). This does not
-involve any hardware emulation, simply CPU and syscall emulation.
-
-QEMU aims to fit into a variety of use cases. It can be invoked directly
-by users wishing to have full control over its behaviour and settings.
-It also aims to facilitate integration into higher level management
-layers, by providing a stable command line interface and monitor API.
-It is commonly invoked indirectly via the libvirt library when using
-open source applications such as oVirt, OpenStack and virt-manager.
+For more information about the upstream community QEMU project, please 
+visit  `<https://github.com/qemu/qemu/>`_ or 
+`<https://www.qemu.org/>`_.
 
 QEMU as a whole is released under the GNU General Public License,
 version 2. For full licensing details, consult the LICENSE file.
@@ -103,6 +89,8 @@ ChangeLog
 
 For version history and release notes, please look at the git history.
 
+
+.. _contact us:
 
 Contact
 =======
