@@ -372,4 +372,8 @@ struct Versal {
 
 G_STATIC_ASSERT(VERSAL_SMMU_TBUID_MAX <= MAX_TBU);
 
+/* SMMU Stream ID */
+#define VERSAL_GEM0_STREAM_ID       0x234
+#define VERSAL_GEM1_STREAM_ID       0x235
+
 #endif
