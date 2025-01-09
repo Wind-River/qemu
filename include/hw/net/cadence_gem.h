@@ -63,6 +63,7 @@ struct CadenceGEMState {
     uint32_t revision;
     uint16_t jumbo_max_len;
     bool pcs_enabled;
+    uint16_t stream_id;
 
     /* GEM registers backing store */
     uint32_t regs[CADENCE_GEM_MAXREG];
