@@ -1007,6 +1007,15 @@ static hwaddr gem_get_desc_addr(CadenceGEMState *s, bool tx, int q)
     return desc_addr;
 }
 
+static void gem_set_dma_attrs(CadenceGEMState *s, MemTxAttrs *attrs)
+{
+    /* set memory transaction requester_id attr to stream-id if available */
+    if (s->stream_id) {
+        attrs->requester_id = s->stream_id;
+        attrs->unspecified = 0;
+    }
+}
+
 static hwaddr gem_get_tx_desc_addr(CadenceGEMState *s, int q)
 {
     return gem_get_desc_addr(s, true, q);
@@ -1020,11 +1029,15 @@ static hwaddr gem_get_rx_desc_addr(CadenceGEMState *s, int q)
 static void gem_get_rx_desc(CadenceGEMState *s, int q)
 {
     hwaddr desc_addr = gem_get_rx_desc_addr(s, q);
+    MemTxAttrs memattrs = MEMTXATTRS_UNSPECIFIED;
 
     DB_PRINT("read descriptor 0x%" HWADDR_PRIx "\n", desc_addr);
 
+    /* set mem transaction attrs for DMA */
+    gem_set_dma_attrs(s, &memattrs);
+
     /* read current descriptor */
-    address_space_read(&s->dma_as, desc_addr, MEMTXATTRS_UNSPECIFIED,
+    address_space_read(&s->dma_as, desc_addr, memattrs,
                        s->rx_desc[q],
                        sizeof(uint32_t) * gem_get_desc_len(s, true));
 
@@ -1045,6 +1058,7 @@ static void gem_get_rx_desc(CadenceGEMState *s, int q)
 static ssize_t gem_receive(NetClientState *nc, const uint8_t *buf, size_t size)
 {
     CadenceGEMState *s = qemu_get_nic_opaque(nc);
+    MemTxAttrs memattrs = MEMTXATTRS_UNSPECIFIED;
     unsigned   rxbufsize, bytes_to_copy;
     unsigned   rxbuf_offset;
     uint8_t   *rxbuf_ptr;
@@ -1136,6 +1150,9 @@ static ssize_t gem_receive(NetClientState *nc, const uint8_t *buf, size_t size)
         return -1;
     }
 
+    /* set mem transaction attrs for DMA */
+    gem_set_dma_attrs(s, &memattrs);
+
     while (bytes_to_copy) {
         hwaddr desc_addr;
 
@@ -1151,7 +1168,7 @@ static ssize_t gem_receive(NetClientState *nc, const uint8_t *buf, size_t size)
         /* Copy packet data to emulated DMA buffer */
         address_space_write(&s->dma_as, rx_desc_get_buffer(s, s->rx_desc[q]) +
                                                                   rxbuf_offset,
-                            MEMTXATTRS_UNSPECIFIED, rxbuf_ptr,
+                            memattrs, rxbuf_ptr,
                             MIN(bytes_to_copy, rxbufsize));
         rxbuf_ptr += MIN(bytes_to_copy, rxbufsize);
         bytes_to_copy -= MIN(bytes_to_copy, rxbufsize);
@@ -1189,7 +1206,7 @@ static ssize_t gem_receive(NetClientState *nc, const uint8_t *buf, size_t size)
 
         /* Descriptor write-back.  */
         desc_addr = gem_get_rx_desc_addr(s, q);
-        address_space_write(&s->dma_as, desc_addr, MEMTXATTRS_UNSPECIFIED,
+        address_space_write(&s->dma_as, desc_addr, memattrs,
                             s->rx_desc[q],
                             sizeof(uint32_t) * gem_get_desc_len(s, true));
 
@@ -1271,6 +1288,7 @@ static void gem_transmit(CadenceGEMState *s)
 {
     uint32_t desc[DESC_MAX_NUM_WORDS];
     hwaddr packet_desc_addr;
+    MemTxAttrs memattrs = MEMTXATTRS_UNSPECIFIED;
     uint8_t     *p;
     unsigned    total_bytes;
     int q = 0;
@@ -1281,6 +1299,9 @@ static void gem_transmit(CadenceGEMState *s)
     }
 
     DB_PRINT("\n");
+
+    /* set mem transaction attributes for DMA */
+    gem_set_dma_attrs(s, &memattrs);
 
     /* The packet we will hand off to QEMU.
      * Packets scattered across multiple descriptors are gathered to this
@@ -1295,7 +1316,7 @@ static void gem_transmit(CadenceGEMState *s)
 
         DB_PRINT("read descriptor 0x%" HWADDR_PRIx "\n", packet_desc_addr);
         address_space_read(&s->dma_as, packet_desc_addr,
-                           MEMTXATTRS_UNSPECIFIED, desc,
+                           memattrs, desc,
                            sizeof(uint32_t) * gem_get_desc_len(s, false));
         /* Handle all descriptors owned by hardware */
         while (tx_desc_get_used(desc) == 0) {
@@ -1330,7 +1351,7 @@ static void gem_transmit(CadenceGEMState *s)
              * contig buffer.
              */
             address_space_read(&s->dma_as, tx_desc_get_buffer(s, desc),
-                               MEMTXATTRS_UNSPECIFIED,
+                               memattrs,
                                p, tx_desc_get_length(desc));
             p += tx_desc_get_length(desc);
             total_bytes += tx_desc_get_length(desc);
@@ -1344,11 +1365,11 @@ static void gem_transmit(CadenceGEMState *s)
                  * the processor.
                  */
                 address_space_read(&s->dma_as, desc_addr,
-                                   MEMTXATTRS_UNSPECIFIED, desc_first,
+                                   memattrs, desc_first,
                                    sizeof(desc_first));
                 tx_desc_set_used(desc_first);
                 address_space_write(&s->dma_as, desc_addr,
-                                    MEMTXATTRS_UNSPECIFIED, desc_first,
+                                    memattrs, desc_first,
                                     sizeof(desc_first));
                 /* Advance the hardware current descriptor past this packet */
                 if (tx_desc_get_wrap(desc)) {
@@ -1402,7 +1423,7 @@ static void gem_transmit(CadenceGEMState *s)
             }
             DB_PRINT("read descriptor 0x%" HWADDR_PRIx "\n", packet_desc_addr);
             address_space_read(&s->dma_as, packet_desc_addr,
-                               MEMTXATTRS_UNSPECIFIED, desc,
+                               memattrs, desc,
                                sizeof(uint32_t) * gem_get_desc_len(s, false));
         }
 
@@ -1797,6 +1818,8 @@ static Property gem_properties[] = {
                       num_type2_screeners, 4),
     DEFINE_PROP_UINT16("jumbo-max-len", CadenceGEMState,
                        jumbo_max_len, 10240),
+    DEFINE_PROP_UINT16("stream-id", CadenceGEMState,
+                       stream_id, 0),
     DEFINE_PROP_LINK("dma", CadenceGEMState, dma_mr,
                      TYPE_MEMORY_REGION, MemoryRegion *),
     DEFINE_PROP_END_OF_LIST(),
