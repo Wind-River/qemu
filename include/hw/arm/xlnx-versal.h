@@ -87,4 +87,8 @@ static inline const char *versal_get_class(VersalVersion version)
     }
 }
 
+/* SMMU Stream ID */
+#define VERSAL_GEM0_STREAM_ID       0x234
+#define VERSAL_GEM1_STREAM_ID       0x235
+
 #endif

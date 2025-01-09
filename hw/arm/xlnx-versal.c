@@ -153,6 +153,7 @@ typedef struct VersalMap {
         const char *phy_mode;
         const uint32_t speed;
         uint32_t phy_id; /* non-zero: use genericPhy node instead of fixed-link */
+        uint16_t stream_id;
     } gem[3];
     size_t num_gem;
 
@@ -309,8 +310,8 @@ static const VersalMap VERSAL_MAP = {
     .sdhci[1] = { 0xf1050000, 128 },
     .num_sdhci = 2,
 
-    .gem[0] = { { 0xff0c0000, 56 }, 2, "rgmii-id", 1000, 0xc },
-    .gem[1] = { { 0xff0d0000, 58 }, 2, "rgmii-id", 1000, 0xd },
+    .gem[0] = { { 0xff0c0000, 56 }, 2, "rgmii-id", 1000, 0xc, 0x234 },
+    .gem[1] = { { 0xff0d0000, 58 }, 2, "rgmii-id", 1000, 0xd, 0x235 },
     .num_gem = 2,
 
     .zdma[0] = { "adma", { 0xffa80000, 60 }, 8, 0x10000, 1 },
@@ -1218,6 +1219,10 @@ static void versal_create_gem(Versal *s,
     object_property_set_int(OBJECT(dev), "num-priority-queues",
                             map->num_prio_queue, &error_abort);
 
+    if (map->stream_id) {
+        object_property_set_int(OBJECT(dev), "stream-id",
+                                map->stream_id, &error_abort);
+    }
     versal_connect_dev_iommu(s, dev, "dma", VERSAL_GEM0_TBUID);
     sysbus_realize_and_unref(SYS_BUS_DEVICE(dev), &error_fatal);
 
