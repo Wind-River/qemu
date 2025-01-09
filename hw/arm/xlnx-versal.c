@@ -266,6 +266,7 @@ static void versal_create_gems(Versal *s, qemu_irq *pic)
         static const int irqs[] = { VERSAL_GEM0_IRQ_0, VERSAL_GEM1_IRQ_0};
         static const uint64_t addrs[] = { MM_GEM0, MM_GEM1 };
         static const int tbu_ids[] = {VERSAL_GEM0_TBUID, VERSAL_GEM1_TBUID };
+        static const int stream_ids[] = { VERSAL_GEM0_STREAM_ID, VERSAL_GEM1_STREAM_ID };
         char *name = g_strdup_printf("gem%d", i);
         DeviceState *dev;
         MemoryRegion *mr;
@@ -286,6 +287,7 @@ static void versal_create_gems(Versal *s, qemu_irq *pic)
         qdev_realize(DEVICE(or_irq), NULL, &error_fatal);
         qdev_connect_gpio_out(DEVICE(or_irq), 0, pic[irqs[i]]);
 
+        object_property_set_int(OBJECT(dev), "stream-id", stream_ids[i], &error_abort);
         versal_connect_dev_iommu(s, dev, "dma", tbu_ids[i]);
         sysbus_realize(SYS_BUS_DEVICE(dev), &error_fatal);
 
