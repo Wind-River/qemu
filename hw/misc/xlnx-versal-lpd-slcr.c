@@ -277,9 +277,9 @@ static const RegisterAccessInfo lpd_slcr_regs_info[] = {
     }
 };
 
-static void lpd_slcr_reset(DeviceState *dev)
+static void lpd_slcr_reset_enter(Object *obj, ResetType type)
 {
-    LPD_SLCR *s = XILINX_LPD_SLCR(dev);
+    LPD_SLCR *s = XILINX_LPD_SLCR(obj);
     unsigned int i;
 
     for (i = 0; i < ARRAY_SIZE(s->regs_info); ++i) {
@@ -334,9 +334,10 @@ static const VMStateDescription vmstate_lpd_slcr = {
 static void lpd_slcr_class_init(ObjectClass *klass, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
+    ResettableClass *rc = RESETTABLE_CLASS(klass);
 
-    dc->reset = lpd_slcr_reset;
     dc->vmsd = &vmstate_lpd_slcr;
+    rc->phases.enter = lpd_slcr_reset_enter;
 }
 
 static const TypeInfo lpd_slcr_info = {
