@@ -2018,9 +2018,9 @@ static const RegisterAccessInfo smmu_cb_page_regs_info[] = {
 #define NUM_REGS_PER_CB (ARRAY_SIZE(smmu_cb_page_regs_info) + \
                          ARRAY_SIZE(smmu_cb_regs_info))
 
-static void smmu500_reset(DeviceState *dev)
+static void smmu500_reset_enter(Object *obj, ResetType type)
 {
-    SMMU500State *s = XILINX_SMMU500(dev);
+    SMMU500State *s = XILINX_SMMU500(obj);
     unsigned int num_pages_log2 = 31 - clz32(s->cfg.num_cb);
     unsigned int i;
 
@@ -2290,11 +2290,12 @@ static const VMStateDescription vmstate_smmu500 = {
 static void smmu500_class_init(ObjectClass *klass, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
+    ResettableClass *rc = RESETTABLE_CLASS(klass);
 
-    dc->reset = smmu500_reset;
     dc->realize = smmu500_realize;
     dc->vmsd = &vmstate_smmu500;
     device_class_set_props(dc, smmu_properties);
+    rc->phases.enter = smmu500_reset_enter;
 }
 
 static void smmu500_iommu_memory_region_class_init(ObjectClass *klass,
