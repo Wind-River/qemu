@@ -485,9 +485,9 @@ static void flexcan_realize(DeviceState *dev, Error **errp)
     flexcan_connect_canbus(s, errp);
 }
 
-static void flexcan_reset(DeviceState *dev)
+static void flexcan_reset_enter(Object *obj, ResetType type)
 {
-    FslFlexCanState *s = FSL_FLEXCAN(dev);
+    FslFlexCanState *s = FSL_FLEXCAN(obj);
     unsigned int i;
 
     for (i = 0; i < ARRAY_SIZE(s->reg_info); ++i) {
@@ -527,11 +527,12 @@ static Property flexcan_core_properties[] = {
 static void flexcan_class_init(ObjectClass *oc, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(oc);
+    ResettableClass *rc = RESETTABLE_CLASS(oc);
 
-    dc->reset = flexcan_reset;
     dc->realize = flexcan_realize;
     device_class_set_props(dc, flexcan_core_properties);
     dc->vmsd = &vmstate_flexcan;
+    rc->phases.enter = flexcan_reset_enter;
 }
 
 static const TypeInfo flexcan_info = {

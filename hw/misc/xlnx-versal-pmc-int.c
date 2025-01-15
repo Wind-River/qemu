@@ -1129,9 +1129,9 @@ static const RegisterAccessInfo pmc_int_regs_regs_info[] = {
     }
 };
 
-static void pmc_int_regs_reset(DeviceState *dev)
+static void pmc_int_regs_reset_enter(Object *obj, ResetType type)
 {
-    PMC_INT_REGS *s = XILINX_PMC_INT_REGS(dev);
+    PMC_INT_REGS *s = XILINX_PMC_INT_REGS(obj);
     unsigned int i;
 
     for (i = 0; i < ARRAY_SIZE(s->regs_info); ++i) {
@@ -1198,10 +1198,11 @@ static const VMStateDescription vmstate_pmc_int_regs = {
 static void pmc_int_regs_class_init(ObjectClass *klass, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
+    ResettableClass *rc = RESETTABLE_CLASS(klass);
 
-    dc->reset = pmc_int_regs_reset;
     dc->realize = pmc_int_regs_realize;
     dc->vmsd = &vmstate_pmc_int_regs;
+    rc->phases.enter = pmc_int_regs_reset_enter;
 }
 
 static const TypeInfo pmc_int_regs_info = {
