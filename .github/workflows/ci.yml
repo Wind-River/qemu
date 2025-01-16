@@ -27,7 +27,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout QEMU source
         uses: actions/checkout@v4
@@ -41,6 +41,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            acpica-tools \
             autoconf \
             automake \
             bison \
@@ -85,5 +86,5 @@ jobs:
       - name: Run QEMU tests
         working-directory: qemu
         run: |
-          make check
+          V=1 make check
 
