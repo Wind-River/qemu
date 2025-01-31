@@ -151,33 +151,36 @@ struct Versal {
 /* Memory-map and IRQ definitions. Copied a subset from
  * auto-generated files.  */
 
+/* PPI interrupts */
 #define VERSAL_GIC_MAINT_IRQ        9
 #define VERSAL_TIMER_VIRT_IRQ       11
 #define VERSAL_TIMER_S_EL1_IRQ      13
 #define VERSAL_TIMER_NS_EL1_IRQ     14
 #define VERSAL_TIMER_NS_EL2_IRQ     10
 
-#define VERSAL_CRL_IRQ             10
+/* SPI interrupts */
 #define VERSAL_UART0_IRQ_0         18
 #define VERSAL_UART1_IRQ_0         19
 #define VERSAL_CANFD0_IRQ_0        20
 #define VERSAL_CANFD1_IRQ_0        21
 #define VERSAL_USB0_IRQ_0          22
+#define VERSAL_CRL_IRQ             51
 #define VERSAL_GEM0_IRQ_0          56
 #define VERSAL_GEM0_WAKE_IRQ_0     57
 #define VERSAL_GEM1_IRQ_0          58
 #define VERSAL_GEM1_WAKE_IRQ_0     59
 #define VERSAL_ADMA_IRQ_0          60
-#define VERSAL_XRAM_IRQ_0          79
+#define VERSAL_XRAM_IRQ_0          78
+#define VERSAL_PCIE_IRQ_0          92
+#define VERSAL_SMMU_IRQ            107
 #define VERSAL_CFU_IRQ_0           120
-#define VERSAL_PMC_APB_IRQ         121
 #define VERSAL_OSPI_IRQ            124
 #define VERSAL_SD0_IRQ_0           126
-#define VERSAL_SMMU_IRQ            139
-#define VERSAL_EFUSE_IRQ           171
-#define VERSAL_TRNG_IRQ            173
-#define VERSAL_RTC_ALARM_IRQ       174
-#define VERSAL_RTC_SECONDS_IRQ     175
+#define VERSAL_EFUSE_IRQ           139
+#define VERSAL_TRNG_IRQ            141
+#define VERSAL_RTC_ALARM_IRQ       142
+#define VERSAL_RTC_SECONDS_IRQ     143
+#define VERSAL_PMC_APB_IRQ         158
 
 /* Architecturally reserved IRQs suitable for virtualization.  */
 #define VERSAL_RSVD_IRQ_FIRST 111
