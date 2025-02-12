@@ -17,6 +17,7 @@
 #include "hw/or-irq.h"
 #include "hw/sd/sdhci.h"
 #include "hw/intc/arm_gicv3.h"
+#include "hw/pci-host/gpex.h"
 #include "hw/char/pl011.h"
 #include "hw/arm/smmu500.h"
 #include "hw/dma/xlnx-zdma.h"
@@ -90,6 +91,7 @@ struct Versal {
             VersalUsb2 usb;
             CanBusState *canbus[XLNX_VERSAL_NR_CANFD];
             XlnxVersalCANFDState canfd[XLNX_VERSAL_NR_CANFD];
+            PCIBus *pcibus;
             LPD_IOU_SLCR slcr;
         } iou;
 
@@ -186,8 +188,19 @@ struct Versal {
 #define VERSAL_RSVD_IRQ_FIRST 111
 #define VERSAL_RSVD_IRQ_LAST  118
 
-#define MM_TOP_RSVD                 0xa0000000U
+#define MM_TOP_RSVD                 0x88000000U
 #define MM_TOP_RSVD_SIZE            0x4000000
+
+#define MM_PCIE_MMIO                0x90000000U
+#define MM_PCIE_MMIO_SIZE           0x2eff0000
+#define MM_PCIE_PIO                 0xbeff0000U
+#define MM_PCIE_PIO_SIZE            GPEX_IO_PORT_SIZE
+
+#define MM_PCIE_MMIO_HIGH           0x100000000ULL
+#define MM_PCIE_MMIO_HIGH_SIZE      0x6f0000000ULL
+#define MM_PCIE_ECAM_HIGH           0x7f0000000ULL
+#define MM_PCIE_ECAM_HIGH_SIZE      0x10000000U
+
 #define MM_GIC_APU_DIST_MAIN        0xf9000000U
 #define MM_GIC_APU_DIST_MAIN_SIZE   0x10000
 #define MM_GIC_APU_REDIST_0         0xf9080000U
