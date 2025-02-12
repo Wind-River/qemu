@@ -32,6 +32,8 @@ OBJECT_DECLARE_SIMPLE_TYPE(GPEXHost, GPEX_HOST)
 #define TYPE_GPEX_ROOT_DEVICE "gpex-root"
 OBJECT_DECLARE_SIMPLE_TYPE(GPEXRootState, GPEX_ROOT_DEVICE)
 
+#define GPEX_IO_PORT_SIZE 64 * 1024
+
 struct GPEXRootState {
     /*< private >*/
     PCIDevice parent_obj;

@@ -124,7 +124,7 @@ static void gpex_host_realize(DeviceState *dev, Error **errp)
      * subregions.
      */
     memory_region_init(&s->io_mmio, OBJECT(s), "gpex_mmio", UINT64_MAX);
-    memory_region_init(&s->io_ioport, OBJECT(s), "gpex_ioport", 64 * 1024);
+    memory_region_init(&s->io_ioport, OBJECT(s), "gpex_ioport", GPEX_IO_PORT_SIZE);
 
     if (s->allow_unmapped_accesses) {
         memory_region_init_io(&s->io_mmio_window, OBJECT(s),
@@ -132,7 +132,7 @@ static void gpex_host_realize(DeviceState *dev, Error **errp)
                               "gpex_mmio_window", UINT64_MAX);
         memory_region_init_io(&s->io_ioport_window, OBJECT(s),
                               &unassigned_io_ops, OBJECT(s),
-                              "gpex_ioport_window", 64 * 1024);
+                              "gpex_ioport_window", GPEX_IO_PORT_SIZE);
 
         memory_region_add_subregion(&s->io_mmio_window, 0, &s->io_mmio);
         memory_region_add_subregion(&s->io_ioport_window, 0, &s->io_ioport);
