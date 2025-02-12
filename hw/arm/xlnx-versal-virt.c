@@ -150,6 +150,97 @@ static void fdt_add_gic_nodes(VersalVirt *s)
     g_free(nodename);
 }
 
+static void fdt_add_pcie_irq_map(const VersalVirt *s, const char *pcie_node)
+{
+    int irq_type = GIC_FDT_IRQ_TYPE_SPI;
+    int irq_level = GIC_FDT_IRQ_FLAGS_LEVEL_HI;
+
+    /*
+     * Cell     Description
+     *  0-2     child unit address, length determined by #address-cells
+     *              cell 0: npt000ss bbbbbbbb dddddfff rrrrrrrr
+     *                          n - relocatable region
+     *                          p - prefetchable region
+     *                          t - aliased address flag
+     *                          s - space code (00 for config space)
+     *                          b - bus
+     *                          d - device
+     *                          f - function
+     *                          r - register (0, not used)
+     *              cell 1: unused
+     *              cell 2: unused
+     *    3     child interrupt specifier (pin)
+     *    4     interrupt parent (GIC phandle)
+     *  5-6     interrupt parent unit address, length determined by interrupt parent's #address-cells
+     *  7-9     parent interrupt specifier, length determined by interrupt parent's #interrupt-cells
+     *              cell 7: IRQ type (SPI or PPI)
+     *              cell 8: IRQ number
+     *              cell 9: IRQ level
+     */
+    qemu_fdt_setprop_cells(s->fdt, pcie_node, "interrupt-map",
+        0x0000, 0x00, 0x00, 0x01, s->phandle.gic, 0x00, 0x00, irq_type, VERSAL_PCIE_IRQ_0, irq_level,
+        0x0000, 0x00, 0x00, 0x02, s->phandle.gic, 0x00, 0x00, irq_type, VERSAL_PCIE_IRQ_1, irq_level,
+        0x0000, 0x00, 0x00, 0x03, s->phandle.gic, 0x00, 0x00, irq_type, VERSAL_PCIE_IRQ_2, irq_level,
+        0x0000, 0x00, 0x00, 0x04, s->phandle.gic, 0x00, 0x00, irq_type, VERSAL_PCIE_IRQ_3, irq_level,
+        0x0800, 0x00, 0x00, 0x01, s->phandle.gic, 0x00, 0x00, irq_type, VERSAL_PCIE_IRQ_1, irq_level,
+        0x0800, 0x00, 0x00, 0x02, s->phandle.gic, 0x00, 0x00, irq_type, VERSAL_PCIE_IRQ_2, irq_level,
+        0x0800, 0x00, 0x00, 0x03, s->phandle.gic, 0x00, 0x00, irq_type, VERSAL_PCIE_IRQ_3, irq_level,
+        0x0800, 0x00, 0x00, 0x04, s->phandle.gic, 0x00, 0x00, irq_type, VERSAL_PCIE_IRQ_0, irq_level,
+        0x1000, 0x00, 0x00, 0x01, s->phandle.gic, 0x00, 0x00, irq_type, VERSAL_PCIE_IRQ_2, irq_level,
+        0x1000, 0x00, 0x00, 0x02, s->phandle.gic, 0x00, 0x00, irq_type, VERSAL_PCIE_IRQ_3, irq_level,
+        0x1000, 0x00, 0x00, 0x03, s->phandle.gic, 0x00, 0x00, irq_type, VERSAL_PCIE_IRQ_0, irq_level,
+        0x1000, 0x00, 0x00, 0x04, s->phandle.gic, 0x00, 0x00, irq_type, VERSAL_PCIE_IRQ_1, irq_level,
+        0x1800, 0x00, 0x00, 0x01, s->phandle.gic, 0x00, 0x00, irq_type, VERSAL_PCIE_IRQ_3, irq_level,
+        0x1800, 0x00, 0x00, 0x02, s->phandle.gic, 0x00, 0x00, irq_type, VERSAL_PCIE_IRQ_0, irq_level,
+        0x1800, 0x00, 0x00, 0x03, s->phandle.gic, 0x00, 0x00, irq_type, VERSAL_PCIE_IRQ_1, irq_level,
+        0x1800, 0x00, 0x00, 0x04, s->phandle.gic, 0x00, 0x00, irq_type, VERSAL_PCIE_IRQ_2, irq_level);
+
+    /*
+     * Cell     Description
+     *  0-2     mask for child unit address (cells 0-2 in interrupt map)
+     *    3     mask for interrupt pin
+     */
+    qemu_fdt_setprop_cells(s->fdt, pcie_node, "interrupt-map-mask",
+                           0x1800, 0x00, 0x00, 0x07);
+}
+
+static void fdt_add_pcie_nodes(VersalVirt *s)
+{
+    char *node;
+    const char compat[] = "pci-host-ecam-generic";
+    int num_buses;
+
+    node = g_strdup_printf("/pcie@%" PRIx32, MM_PCIE_MMIO);
+    num_buses = MM_PCIE_ECAM_HIGH_SIZE / PCIE_MMCFG_SIZE_MIN;
+
+    qemu_fdt_add_subnode(s->fdt, node);
+
+    fdt_add_pcie_irq_map(s, node);
+
+    qemu_fdt_setprop_cell(s->fdt, node, "num-lanes", 1);
+
+    qemu_fdt_setprop_sized_cells(s->fdt, node, "ranges",
+                                 1, FDT_PCI_RANGE_IOPORT, 2, 0,
+                                 2, MM_PCIE_PIO, 2, MM_PCIE_PIO_SIZE,
+                                 1, FDT_PCI_RANGE_MMIO, 2, MM_PCIE_MMIO,
+                                 2, MM_PCIE_MMIO, 2, MM_PCIE_MMIO_SIZE,
+                                 1, FDT_PCI_RANGE_MMIO_64BIT,
+                                 2, MM_PCIE_MMIO_HIGH,
+                                 2, MM_PCIE_MMIO_HIGH,
+                                 2, MM_PCIE_MMIO_HIGH_SIZE);
+    qemu_fdt_setprop_cell(s->fdt, node, "#interrupt-cells", 1);
+    qemu_fdt_setprop_cells(s->fdt, node, "bus-range", 0,
+                           num_buses - 1);
+    qemu_fdt_setprop(s->fdt, node, "dma-coherent", NULL, 0);
+    qemu_fdt_setprop_string(s->fdt, node, "device_type", "pci");
+    qemu_fdt_setprop_cell(s->fdt, node, "#size-cells", 2);
+    qemu_fdt_setprop_cell(s->fdt, node, "#address-cells", 3);
+    qemu_fdt_setprop_sized_cells(s->fdt, node, "reg",
+                                 2, MM_PCIE_ECAM_HIGH,
+                                 2, MM_PCIE_ECAM_HIGH_SIZE);
+    qemu_fdt_setprop(s->fdt, node, "compatible", compat, sizeof(compat));
+}
+
 static void fdt_add_smmu_nodes(VersalVirt *s)
 {
     char *node;
@@ -730,6 +821,7 @@ static void versal_virt_init(MachineState *machine)
     fdt_add_uart_nodes(s);
     fdt_add_canfd_nodes(s);
     fdt_add_gic_nodes(s);
+    fdt_add_pcie_nodes(s);
     fdt_add_smmu_nodes(s);
     fdt_add_timer_nodes(s);
     fdt_add_zdma_nodes(s);
