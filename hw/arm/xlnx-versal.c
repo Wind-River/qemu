@@ -51,6 +51,7 @@
 #include "hw/intc/arm_gic.h"
 #include "hw/arm/smmu500.h"
 #include "hw/pci-host/gpex.h"
+#include "hw/pci/pcie_host.h"
 #include "hw/core/split-irq.h"
 #include "target/arm/cpu.h"
 #include "hw/cpu/cluster.h"
@@ -184,6 +185,18 @@ typedef struct VersalMap {
     size_t num_usb;
 
     VersalSimplePeriphMap smmu;
+
+    struct VersalPcieMap {
+        uint64_t mmio;
+        uint64_t mmio_size;
+        uint64_t pio;
+        uint64_t pio_size;
+        uint64_t mmio_high;
+        uint64_t mmio_high_size;
+        uint64_t ecam;
+        uint64_t ecam_size;
+        int irq[4];
+    } pcie;
 
     uint64_t lpd_iou_slcr;
     uint64_t lpd_slcr;
@@ -329,6 +342,14 @@ static const VersalMap VERSAL_MAP = {
     .num_usb = 1,
 
     .smmu = { 0xfd800000, 139 },
+
+    .pcie = {
+        .mmio = 0x90000000, .mmio_size = 0x2eff0000,
+        .pio = 0xbeff0000, .pio_size = 0x10000,
+        .mmio_high = 0x100000000ULL, .mmio_high_size = 0x6f0000000ULL,
+        .ecam = 0x7f0000000ULL, .ecam_size = 0x10000000,
+        .irq = { 140, 141, 142, 143 },
+    },
 
     .lpd_iou_slcr = 0xff080000,
 
@@ -926,18 +947,7 @@ static inline void versal_create_and_connect_gic(Versal *s,
     }
 }
 
-/* PCIe address map for Versal */
-#define MM_PCIE_MMIO                0x90000000U
-#define MM_PCIE_MMIO_SIZE           0x2eff0000
-#define MM_PCIE_PIO                 0xbeff0000U
-#define MM_PCIE_PIO_SIZE            0x10000
-#define MM_PCIE_MMIO_HIGH           0x100000000ULL
-#define MM_PCIE_MMIO_HIGH_SIZE      0x6f0000000ULL
-#define MM_PCIE_ECAM_HIGH           0x7f0000000ULL
-#define MM_PCIE_ECAM_HIGH_SIZE      0x10000000U
-#define VERSAL_PCIE_IRQ_0           140
-
-static void versal_create_pcie(Versal *s)
+static void versal_create_pcie(Versal *s, const struct VersalPcieMap *map)
 {
     DeviceState *dev;
     PCIHostState *pci;
@@ -947,6 +957,9 @@ static void versal_create_pcie(Versal *s)
     MemoryRegion *mmio_high_alias;
     MemoryRegion *mmio_reg;
     MemoryRegion *ioport_reg;
+    g_autofree char *node = NULL;
+    const char compat[] = "pci-host-ecam-generic";
+    int num_buses;
     int i;
 
     dev = qdev_new(TYPE_GPEX_HOST);
@@ -957,38 +970,109 @@ static void versal_create_pcie(Versal *s)
     ecam_alias = g_new0(MemoryRegion, 1);
     ecam_reg = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 0);
     memory_region_init_alias(ecam_alias, OBJECT(dev), "pcie-ecam",
-                             ecam_reg, 0, MM_PCIE_ECAM_HIGH_SIZE);
-    memory_region_add_subregion(&s->mr_ps, MM_PCIE_ECAM_HIGH, ecam_alias);
+                             ecam_reg, 0, map->ecam_size);
+    memory_region_add_subregion(&s->mr_ps, map->ecam, ecam_alias);
 
     /* Map MMIO window */
     mmio_alias = g_new0(MemoryRegion, 1);
     mmio_reg = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 1);
     memory_region_init_alias(mmio_alias, OBJECT(dev), "pcie-mmio",
-                             mmio_reg, MM_PCIE_MMIO, MM_PCIE_MMIO_SIZE);
-    memory_region_add_subregion(&s->mr_ps, MM_PCIE_MMIO, mmio_alias);
+                             mmio_reg, map->mmio, map->mmio_size);
+    memory_region_add_subregion(&s->mr_ps, map->mmio, mmio_alias);
 
     /* Map high MMIO window */
     mmio_high_alias = g_new0(MemoryRegion, 1);
     memory_region_init_alias(mmio_high_alias, OBJECT(dev), "pcie-mmio-high",
-                             mmio_reg, MM_PCIE_MMIO_HIGH,
-                             MM_PCIE_MMIO_HIGH_SIZE);
-    memory_region_add_subregion(&s->mr_ps, MM_PCIE_MMIO_HIGH,
-                                mmio_high_alias);
+                             mmio_reg, map->mmio_high, map->mmio_high_size);
+    memory_region_add_subregion(&s->mr_ps, map->mmio_high, mmio_high_alias);
 
     /* Map IO port space */
     ioport_reg = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 2);
-    memory_region_add_subregion(&s->mr_ps, MM_PCIE_PIO, ioport_reg);
+    memory_region_add_subregion(&s->mr_ps, map->pio, ioport_reg);
 
     /* Map IRQs */
     for (i = 0; i < GPEX_NUM_IRQS; i++) {
-        versal_sysbus_connect_irq(s, SYS_BUS_DEVICE(dev), i,
-                                  VERSAL_PCIE_IRQ_0 + i);
-        gpex_set_irq_num(GPEX_HOST(dev), i, VERSAL_PCIE_IRQ_0 + i);
+        versal_sysbus_connect_irq(s, SYS_BUS_DEVICE(dev), i, map->irq[i]);
+        gpex_set_irq_num(GPEX_HOST(dev), i, map->irq[i]);
     }
 
     /* configure root complex */
     pci = PCI_HOST_BRIDGE(dev);
     pci->bypass_iommu = true;
+
+    /* FDT generation */
+    num_buses = map->ecam_size / PCIE_MMCFG_SIZE_MIN;
+    node = g_strdup_printf("/pcie@%" PRIx64, map->mmio);
+    qemu_fdt_add_subnode(s->cfg.fdt, node);
+
+    /*
+     * Cell     Description
+     *  0-2     child unit address, length determined by #address-cells
+     *              cell 0: npt000ss bbbbbbbb dddddfff rrrrrrrr
+     *                          n - relocatable region
+     *                          p - prefetchable region
+     *                          t - aliased address flag
+     *                          s - space code (00 for config space)
+     *                          b - bus
+     *                          d - device
+     *                          f - function
+     *                          r - register (0, not used)
+     *              cell 1: unused
+     *              cell 2: unused
+     *    3     child interrupt specifier (pin)
+     *    4     interrupt parent (GIC phandle)
+     *  5-6     interrupt parent unit address, length determined by interrupt parent's #address-cells
+     *  7-9     parent interrupt specifier, length determined by interrupt parent's #interrupt-cells
+     *              cell 7: IRQ type (SPI or PPI)
+     *              cell 8: IRQ number
+     *              cell 9: IRQ level
+     */
+    qemu_fdt_setprop_cells(s->cfg.fdt, node, "interrupt-map",
+        0x0000, 0x00, 0x00, 0x01, s->phandle.gic, 0x00, 0x00, GIC_FDT_IRQ_TYPE_SPI, map->irq[0], GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        0x0000, 0x00, 0x00, 0x02, s->phandle.gic, 0x00, 0x00, GIC_FDT_IRQ_TYPE_SPI, map->irq[1], GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        0x0000, 0x00, 0x00, 0x03, s->phandle.gic, 0x00, 0x00, GIC_FDT_IRQ_TYPE_SPI, map->irq[2], GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        0x0000, 0x00, 0x00, 0x04, s->phandle.gic, 0x00, 0x00, GIC_FDT_IRQ_TYPE_SPI, map->irq[3], GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        0x0800, 0x00, 0x00, 0x01, s->phandle.gic, 0x00, 0x00, GIC_FDT_IRQ_TYPE_SPI, map->irq[1], GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        0x0800, 0x00, 0x00, 0x02, s->phandle.gic, 0x00, 0x00, GIC_FDT_IRQ_TYPE_SPI, map->irq[2], GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        0x0800, 0x00, 0x00, 0x03, s->phandle.gic, 0x00, 0x00, GIC_FDT_IRQ_TYPE_SPI, map->irq[3], GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        0x0800, 0x00, 0x00, 0x04, s->phandle.gic, 0x00, 0x00, GIC_FDT_IRQ_TYPE_SPI, map->irq[0], GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        0x1000, 0x00, 0x00, 0x01, s->phandle.gic, 0x00, 0x00, GIC_FDT_IRQ_TYPE_SPI, map->irq[2], GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        0x1000, 0x00, 0x00, 0x02, s->phandle.gic, 0x00, 0x00, GIC_FDT_IRQ_TYPE_SPI, map->irq[3], GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        0x1000, 0x00, 0x00, 0x03, s->phandle.gic, 0x00, 0x00, GIC_FDT_IRQ_TYPE_SPI, map->irq[0], GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        0x1000, 0x00, 0x00, 0x04, s->phandle.gic, 0x00, 0x00, GIC_FDT_IRQ_TYPE_SPI, map->irq[1], GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        0x1800, 0x00, 0x00, 0x01, s->phandle.gic, 0x00, 0x00, GIC_FDT_IRQ_TYPE_SPI, map->irq[3], GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        0x1800, 0x00, 0x00, 0x02, s->phandle.gic, 0x00, 0x00, GIC_FDT_IRQ_TYPE_SPI, map->irq[0], GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        0x1800, 0x00, 0x00, 0x03, s->phandle.gic, 0x00, 0x00, GIC_FDT_IRQ_TYPE_SPI, map->irq[1], GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+        0x1800, 0x00, 0x00, 0x04, s->phandle.gic, 0x00, 0x00, GIC_FDT_IRQ_TYPE_SPI, map->irq[2], GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+
+    /*
+     * Cell     Description
+     *  0-2     mask for child unit address (cells 0-2 in interrupt map)
+     *    3     mask for interrupt pin
+     */
+    qemu_fdt_setprop_cells(s->cfg.fdt, node, "interrupt-map-mask",
+                           0x1800, 0x00, 0x00, 0x07);
+
+    qemu_fdt_setprop_cell(s->cfg.fdt, node, "num-lanes", 1);
+    qemu_fdt_setprop_sized_cells(s->cfg.fdt, node, "ranges",
+                                 1, FDT_PCI_RANGE_IOPORT, 2, 0,
+                                 2, map->pio, 2, map->pio_size,
+                                 1, FDT_PCI_RANGE_MMIO, 2, map->mmio,
+                                 2, map->mmio, 2, map->mmio_size,
+                                 1, FDT_PCI_RANGE_MMIO_64BIT,
+                                 2, map->mmio_high,
+                                 2, map->mmio_high,
+                                 2, map->mmio_high_size);
+    qemu_fdt_setprop_cell(s->cfg.fdt, node, "#interrupt-cells", 1);
+    qemu_fdt_setprop_cells(s->cfg.fdt, node, "bus-range", 0, num_buses - 1);
+    qemu_fdt_setprop(s->cfg.fdt, node, "dma-coherent", NULL, 0);
+    qemu_fdt_setprop_string(s->cfg.fdt, node, "device_type", "pci");
+    qemu_fdt_setprop_cell(s->cfg.fdt, node, "#size-cells", 2);
+    qemu_fdt_setprop_cell(s->cfg.fdt, node, "#address-cells", 3);
+    qemu_fdt_setprop_sized_cells(s->cfg.fdt, node, "reg",
+                                 2, map->ecam, 2, map->ecam_size);
+    qemu_fdt_setprop(s->cfg.fdt, node, "compatible",
+                     compat, sizeof(compat));
 }
 
 static DeviceState *versal_create_cpu(Versal *s,
@@ -2144,7 +2228,9 @@ static void versal_realize_common(Versal *s)
         versal_create_smmu(s, &map->smmu);
     }
 
-    versal_create_pcie(s);
+    if (map->pcie.mmio) {
+        versal_create_pcie(s, &map->pcie);
+    }
 
     if (map->lpd_iou_slcr) {
         versal_create_lpd_iou_slcr(s, map->lpd_iou_slcr);
