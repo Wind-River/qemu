@@ -174,6 +174,9 @@ struct Versal {
 #define VERSAL_ADMA_IRQ_0          60
 #define VERSAL_XRAM_IRQ_0          78
 #define VERSAL_PCIE_IRQ_0          92
+#define VERSAL_PCIE_IRQ_1          93
+#define VERSAL_PCIE_IRQ_2          94
+#define VERSAL_PCIE_IRQ_3          95
 #define VERSAL_SMMU_IRQ            107
 #define VERSAL_CFU_IRQ_0           120
 #define VERSAL_OSPI_IRQ            124
