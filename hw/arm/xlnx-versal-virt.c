@@ -146,6 +146,7 @@ static void fdt_add_gic_nodes(VersalVirt *s)
                                  2, MM_GIC_APU_REDIST_0,
                                  2, MM_GIC_APU_REDIST_0_SIZE);
     qemu_fdt_setprop_cell(s->fdt, nodename, "#interrupt-cells", 3);
+    qemu_fdt_setprop_cell(s->fdt, nodename, "#address-cells", 2);
     qemu_fdt_setprop_string(s->fdt, nodename, "compatible", "arm,gic-v3");
     g_free(nodename);
 }
