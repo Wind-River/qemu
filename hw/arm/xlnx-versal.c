@@ -166,6 +166,61 @@ static void versal_create_rpu_cpus(Versal *s)
     qdev_realize(DEVICE(&s->lpd.rpu.cluster), NULL, &error_fatal);
 }
 
+static void versal_create_pcie(Versal *s, qemu_irq *pic)
+{
+    DeviceState *dev;
+    PCIHostState *pci;
+    MemoryRegion *ecam_alias;
+    MemoryRegion *ecam_reg;
+    MemoryRegion *mmio_alias;
+    MemoryRegion *mmio_high_alias;
+    MemoryRegion *mmio_reg;
+    MemoryRegion *ioport_reg;
+    int i;
+
+    dev = qdev_new(TYPE_GPEX_HOST);
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(dev), &error_fatal);
+
+    /* Map the first MM_PCIE_ECAM_HIGH_SIZE bytes of ECAM space */
+    ecam_alias = g_new0(MemoryRegion, 1);
+    ecam_reg = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 0);
+
+    memory_region_init_alias(ecam_alias, OBJECT(dev), "pcie-ecam",
+                             ecam_reg, 0, MM_PCIE_ECAM_HIGH_SIZE);
+    memory_region_add_subregion(&s->mr_ps, MM_PCIE_ECAM_HIGH, ecam_alias);
+
+    /* Map the MMIO window into PS address space */
+    mmio_alias = g_new0(MemoryRegion, 1);
+    mmio_reg = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 1);
+    memory_region_init_alias(mmio_alias, OBJECT(dev), "pcie-mmio",
+                             mmio_reg, MM_PCIE_MMIO, MM_PCIE_MMIO_SIZE);
+    memory_region_add_subregion(&s->mr_ps, MM_PCIE_MMIO, mmio_alias);
+
+    /* Map the high MMIO window into PS address space */
+    mmio_high_alias = g_new0(MemoryRegion, 1);
+    memory_region_init_alias(mmio_high_alias, OBJECT(dev), "pcie-mmio-high",
+                             mmio_reg, MM_PCIE_MMIO_HIGH,
+                             MM_PCIE_MMIO_HIGH_SIZE);
+    memory_region_add_subregion(&s->mr_ps, MM_PCIE_MMIO_HIGH,
+                                mmio_high_alias);
+
+    /* Map IO port space */
+    ioport_reg = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 2);
+    memory_region_add_subregion(&s->mr_ps, MM_PCIE_PIO, ioport_reg);
+
+    /* Map IRQs */
+    for (i = 0; i < GPEX_NUM_IRQS; i++) {
+        sysbus_connect_irq(SYS_BUS_DEVICE(dev), i,
+                           pic[VERSAL_PCIE_IRQ_0 + i]);
+        gpex_set_irq_num(GPEX_HOST(dev), i, VERSAL_PCIE_IRQ_0 + i);
+    }
+
+    /* configure root complex */
+    pci = PCI_HOST_BRIDGE(dev);
+    pci->bypass_iommu = true; //todo
+    s->lpd.iou.pcibus = pci->bus;
+}
+
 static void versal_create_uarts(Versal *s, qemu_irq *pic)
 {
     int i;
@@ -1025,6 +1080,7 @@ static void versal_realize(DeviceState *dev, Error **errp)
     versal_create_uarts(s, pic);
     versal_create_canfds(s, pic);
     versal_create_smmu(s, pic);
+    versal_create_pcie(s, pic);
     versal_create_usbs(s, pic);
     versal_create_lpd_iou_slcr(s);
     versal_create_gems(s, pic);
