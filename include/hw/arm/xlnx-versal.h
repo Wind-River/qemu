@@ -17,6 +17,7 @@
 #include "hw/or-irq.h"
 #include "hw/sd/sdhci.h"
 #include "hw/intc/arm_gicv3.h"
+#include "hw/intc/arm_gicv3_its_common.h"
 #include "hw/pci-host/gpex.h"
 #include "hw/char/pl011.h"
 #include "hw/arm/smmu500.h"
@@ -208,6 +209,8 @@ struct Versal {
 #define MM_GIC_APU_DIST_MAIN_SIZE   0x10000
 #define MM_GIC_APU_REDIST_0         0xf9080000U
 #define MM_GIC_APU_REDIST_0_SIZE    0x80000
+#define MM_GIC_APU_ITS              0xf9020000U
+#define MM_GIC_APU_ITS_SIZE         ITS_SIZE
 
 #define MM_UART0                    0xff000000U
 #define MM_UART0_SIZE               0x10000
