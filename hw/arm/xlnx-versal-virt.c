@@ -43,6 +43,7 @@ struct VersalVirt {
     int fdt_size;
     struct {
         uint32_t gic;
+        uint32_t gic_its;
         uint32_t ethernet_phy[2];
         uint32_t clk_125Mhz;
         uint32_t clk_25Mhz;
@@ -73,6 +74,7 @@ static void fdt_create(VersalVirt *s)
 
     /* Allocate all phandles.  */
     s->phandle.gic = qemu_fdt_alloc_phandle(s->fdt);
+    s->phandle.gic_its = qemu_fdt_alloc_phandle(s->fdt);
     for (i = 0; i < ARRAY_SIZE(s->phandle.ethernet_phy); i++) {
         s->phandle.ethernet_phy[i] = qemu_fdt_alloc_phandle(s->fdt);
     }
@@ -129,6 +131,22 @@ static void fdt_add_cpu_nodes(VersalVirt *s, uint32_t psci_conduit)
     }
 }
 
+static void fdt_add_gic_its_node(VersalVirt *s, char *gicname)
+{
+    char *nodename;
+    const char compat[] = "arm,gic-v3-its";
+
+    nodename = g_strdup_printf("%s/gic-its@%x", gicname, MM_GIC_APU_ITS);
+    qemu_fdt_add_subnode(s->fdt, nodename);
+    qemu_fdt_setprop_cell(s->fdt, nodename, "phandle", s->phandle.gic_its);
+    qemu_fdt_setprop_sized_cells(s->fdt, nodename, "reg",
+                                 2, MM_GIC_APU_ITS,
+                                 2, MM_GIC_APU_ITS_SIZE);
+    qemu_fdt_setprop_cell(s->fdt, nodename, "#msi-cells", 1);
+    qemu_fdt_setprop(s->fdt, nodename, "msi-controller", NULL, 0);
+    qemu_fdt_setprop_string(s->fdt, nodename, "compatible", compat);
+}
+
 static void fdt_add_gic_nodes(VersalVirt *s)
 {
     char *nodename;
@@ -148,6 +166,9 @@ static void fdt_add_gic_nodes(VersalVirt *s)
     qemu_fdt_setprop_cell(s->fdt, nodename, "#interrupt-cells", 3);
     qemu_fdt_setprop_cell(s->fdt, nodename, "#address-cells", 2);
     qemu_fdt_setprop_string(s->fdt, nodename, "compatible", "arm,gic-v3");
+
+    fdt_add_gic_its_node(s, nodename);
+
     g_free(nodename);
 }
 
@@ -219,6 +240,18 @@ static void fdt_add_pcie_nodes(VersalVirt *s)
     fdt_add_pcie_irq_map(s, node);
 
     qemu_fdt_setprop_cell(s->fdt, node, "num-lanes", 1);
+
+    /*
+     * The Requester ID identifies each PCI device under a root complex
+     * Bits [15:8] are the Bus number
+     * Bits [7:3] are the Device number
+     * Bits [2:0] are the Function number
+     */
+    qemu_fdt_setprop_cells(s->fdt, node, "msi-map",
+                           0,                  /* Requester ID (RID) base */
+                           s->phandle.gic_its, /* MSI controller phandle */
+                           0,                  /* msi-base */
+                           0x10000);           /* RID length */
 
     qemu_fdt_setprop_sized_cells(s->fdt, node, "ranges",
                                  1, FDT_PCI_RANGE_IOPORT, 2, 0,
