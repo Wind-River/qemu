@@ -64,6 +64,22 @@ static void versal_create_apu_cpus(Versal *s)
     qdev_realize(DEVICE(&s->fpd.apu.cluster), NULL, &error_fatal);
 }
 
+static void create_its(Versal *s)
+{
+    DeviceState *dev;
+    MemoryRegion *its_reg;
+
+    dev = qdev_new("arm-gicv3-its");
+
+    object_property_set_link(OBJECT(dev), "parent-gicv3",
+                             OBJECT(&s->fpd.apu.gic), &error_abort);
+
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(dev), &error_fatal);
+
+    its_reg = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 0);
+    memory_region_add_subregion(&s->fpd.apu.mr, MM_GIC_APU_ITS, its_reg);
+}
+
 static void versal_create_apu_gic(Versal *s, qemu_irq *pic)
 {
     static const uint64_t addrs[] = {
@@ -131,6 +147,8 @@ static void versal_create_apu_gic(Versal *s, qemu_irq *pic)
         sysbus_connect_irq(gicbusdev, i + 3 * nr_apu_cpus,
                            qdev_get_gpio_in(cpudev, ARM_CPU_VFIQ));
     }
+
+    create_its(s);
 
     for (i = 0; i < XLNX_VERSAL_NR_IRQS; i++) {
         pic[i] = qdev_get_gpio_in(gicdev, i);
