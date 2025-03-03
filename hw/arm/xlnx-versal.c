@@ -100,6 +100,10 @@ static void versal_create_apu_gic(Versal *s, qemu_irq *pic)
     qdev_prop_set_uint32(gicdev, "num-cpu", nr_apu_cpus);
     qdev_prop_set_uint32(gicdev, "num-irq", XLNX_VERSAL_NR_IRQS + 32);
 
+
+    object_property_set_link(OBJECT(&s->fpd.apu.gic), "sysmem",
+                             OBJECT(&s->fpd.apu.mr), &error_fatal);
+    qdev_prop_set_bit(DEVICE(&s->fpd.apu.gic), "has-lpi", true);
     redist_region_count = qlist_new();
     qlist_append_int(redist_region_count, nr_apu_cpus);
     qdev_prop_set_array(gicdev, "redist-region-count", redist_region_count);
