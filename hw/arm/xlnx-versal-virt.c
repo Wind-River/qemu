@@ -855,7 +855,6 @@ static void versal_virt_init(MachineState *machine)
     fdt_add_gem_nodes(s);
     fdt_add_uart_nodes(s);
     fdt_add_canfd_nodes(s);
-    fdt_add_gic_nodes(s);
     fdt_add_pcie_nodes(s);
     fdt_add_smmu_nodes(s);
     fdt_add_timer_nodes(s);
@@ -866,6 +865,14 @@ static void versal_virt_init(MachineState *machine)
     fdt_add_bbram_node(s);
     fdt_add_efuse_ctrl_node(s);
     fdt_add_efuse_cache_node(s);
+    /*
+     * Some operating systems parse the GIC as a standard peripheral rather
+     * than attempting to initialize interrupt parents before their children.
+     * To make sure peripherals that specify the GIC as their interrupt parent
+     * are initialized properly, place the GIC node before any peripheral I/O
+     * devices in the device tree.
+     */
+    fdt_add_gic_nodes(s);
     fdt_add_cpu_nodes(s, psci_conduit);
     fdt_add_clk_node(s, "/clk125", 125000000, s->phandle.clk_125Mhz);
     fdt_add_clk_node(s, "/clk25", 25000000, s->phandle.clk_25Mhz);
