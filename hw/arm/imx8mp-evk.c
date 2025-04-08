@@ -194,6 +194,29 @@ static void imx8mp_fdt_add_soc(Imx8mpEvk *s,
     g_free(name);
 }
 
+static void imx8mp_fdt_add_gpt_timer(Imx8mpEvk *s,
+                                     const char *parent)
+{
+    char *name;
+
+    name = g_strdup_printf("%s/timer@%lx", parent,
+                           fsl_imx8mp_memmap[FSL_IMX8MP_GPT1].addr);
+    qemu_fdt_add_subnode(s->fdt, name);
+    qemu_fdt_setprop_cell(s->fdt, name, "interrupt-parent",
+                          s->phandle.gic);
+    qemu_fdt_setprop_cells(s->fdt, name, "interrupts",
+                           GIC_FDT_IRQ_TYPE_SPI,
+                           FSL_IMX8MP_GPT1_IRQ,
+                           GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+    qemu_fdt_setprop_cells(s->fdt, name, "clocks",
+                           s->phandle.ccm);
+    qemu_fdt_setprop_sized_cells(s->fdt, name, "reg",
+                                 2, fsl_imx8mp_memmap[FSL_IMX8MP_GPT1].addr,
+                                 2, fsl_imx8mp_memmap[FSL_IMX8MP_GPT1].size);
+    qemu_fdt_setprop_string(s->fdt, name, "compatible", "fsl,imx-gpt");
+    g_free(name);
+}
+
 static void imx8mp_fdt_create(Imx8mpEvk *s,
                               MachineState *machine)
 {
@@ -245,6 +268,7 @@ static void imx8mp_fdt_create(Imx8mpEvk *s,
     imx8mp_fdt_add_clock(s, "clock-ext4", "clk_ext4", root,
                          0x7ed6b40, s->phandle.clk_ext4);
     imx8mp_fdt_add_soc(s, root);
+    imx8mp_fdt_add_gpt_timer(s, root);
 
     g_free(root);
 }
