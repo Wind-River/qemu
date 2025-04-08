@@ -8,6 +8,7 @@
 
 #include "qemu/osdep.h"
 #include "exec/address-spaces.h"
+#include "hw/arm/bsa.h"
 #include "hw/arm/boot.h"
 #include "hw/arm/fsl-imx8mp.h"
 #include "hw/boards.h"
@@ -30,6 +31,10 @@ struct Imx8mpEvk {
     struct arm_boot_info binfo;
 
     void *fdt;
+
+    struct {
+        uint32_t gic;
+    } phandle;
 };
 
 
@@ -99,6 +104,31 @@ static void imx8mp_fdt_add_cpus(Imx8mpEvk *s,
     g_free(cpus_nodename);
 }
 
+static void imx8mp_fdt_add_gic(Imx8mpEvk *s,
+                               const char *parent)
+{
+    char *name;
+
+    name = g_strdup_printf("%s/gic@%lx", parent,
+                           fsl_imx8mp_memmap[FSL_IMX8MP_GIC_DIST].addr);
+    qemu_fdt_add_subnode(s->fdt, name);
+    qemu_fdt_setprop_cell(s->fdt, name, "phandle",
+                          s->phandle.gic);
+    qemu_fdt_setprop_cells(s->fdt, name, "interrupts",
+                           GIC_FDT_IRQ_TYPE_PPI,
+                           ARCH_GIC_MAINT_IRQ,
+                           GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+    qemu_fdt_setprop(s->fdt, name, "interrupt-controller", NULL, 0);
+    qemu_fdt_setprop_sized_cells(s->fdt, name, "reg",
+                                 2, fsl_imx8mp_memmap[FSL_IMX8MP_GIC_DIST].addr,
+                                 2, fsl_imx8mp_memmap[FSL_IMX8MP_GIC_DIST].size,
+                                 2, fsl_imx8mp_memmap[FSL_IMX8MP_GIC_REDIST].addr,
+                                 2, fsl_imx8mp_memmap[FSL_IMX8MP_GIC_REDIST].size);
+    qemu_fdt_setprop_cell(s->fdt, name, "#interrupt-cells", 3);
+    qemu_fdt_setprop_string(s->fdt, name, "compatible", "arm,gic-v3");
+    g_free(name);
+}
+
 static void imx8mp_fdt_create(Imx8mpEvk *s,
                               MachineState *machine)
 {
@@ -112,10 +142,14 @@ static void imx8mp_fdt_create(Imx8mpEvk *s,
         exit(1);
     }
 
+    /* Allocate phandles */
+    s->phandle.gic = qemu_fdt_alloc_phandle(s->fdt);
+
     /* Device Tree Root */
     root = g_strdup_printf("/");
 
     /* Header */
+    qemu_fdt_setprop_cell(s->fdt, root, "interrupt-parent", s->phandle.gic);
     qemu_fdt_setprop_cell(s->fdt, root, "#size-cells", 0x2);
     qemu_fdt_setprop_cell(s->fdt, root, "#address-cells", 0x2);
     qemu_fdt_setprop_string(s->fdt, root, "model", mc->desc);
@@ -125,6 +159,7 @@ static void imx8mp_fdt_create(Imx8mpEvk *s,
     qemu_fdt_add_subnode(s->fdt, "/chosen");
 
     imx8mp_fdt_add_cpus(s, machine, root);
+    imx8mp_fdt_add_gic(s, root);
 
     g_free(root);
 }
