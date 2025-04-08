@@ -67,7 +67,40 @@ static void *imx8mp_evk_get_dtb(const struct arm_boot_info *binfo)
     return s->fdt;
 }
 
-static void imx8mp_fdt_create(Imx8mpEvk *s)
+static void imx8mp_fdt_add_cpus(Imx8mpEvk *s,
+                                MachineState *machine,
+                                const char *parent)
+{
+    int i;
+    char *cpus_nodename = g_strdup_printf("%s/cpus", parent);
+
+    qemu_fdt_add_subnode(s->fdt, cpus_nodename);
+    qemu_fdt_setprop_cell(s->fdt, cpus_nodename,
+                          "#size-cells", 0x0);
+    qemu_fdt_setprop_cell(s->fdt, cpus_nodename,
+                          "#address-cells", 1);
+
+    for (i = machine->smp.cpus - 1; i >= 0; i--) {
+        char *name = g_strdup_printf("%s/cpu@%d", cpus_nodename, i);
+        ARMCPU *armcpu = ARM_CPU(qemu_get_cpu(i));
+
+        qemu_fdt_add_subnode(s->fdt, name);
+        qemu_fdt_setprop_cell(s->fdt, name, "reg",
+                              arm_cpu_mp_affinity(armcpu));
+        if (s->binfo.psci_conduit != QEMU_PSCI_CONDUIT_DISABLED) {
+            qemu_fdt_setprop_string(s->fdt, name,
+                                    "enable-method", "psci");
+        }
+        qemu_fdt_setprop_string(s->fdt, name, "device_type", "cpu");
+        qemu_fdt_setprop_string(s->fdt, name, "compatible",
+                                armcpu->dtb_compatible);
+        g_free(name);
+    }
+    g_free(cpus_nodename);
+}
+
+static void imx8mp_fdt_create(Imx8mpEvk *s,
+                              MachineState *machine)
 {
     MachineClass *mc = MACHINE_GET_CLASS(s);
     char *root;
@@ -90,6 +123,8 @@ static void imx8mp_fdt_create(Imx8mpEvk *s)
 
     /* Chosen node */
     qemu_fdt_add_subnode(s->fdt, "/chosen");
+
+    imx8mp_fdt_add_cpus(s, machine, root);
 
     g_free(root);
 }
@@ -135,7 +170,7 @@ static void imx8mp_evk_init(MachineState *machine)
         qdev_realize_and_unref(carddev, bus, &error_fatal);
     }
 
-    imx8mp_fdt_create(s);
+    imx8mp_fdt_create(s, machine);
 
     if (!qtest_enabled()) {
         arm_load_kernel(&s->soc.cpu[0], machine, &s->binfo);
