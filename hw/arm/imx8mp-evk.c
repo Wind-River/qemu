@@ -17,6 +17,17 @@
 #include "qapi/error.h"
 #include <libfdt.h>
 
+#define TYPE_IMX8MP_EVK_MACHINE MACHINE_TYPE_NAME("imx8mp-evk")
+OBJECT_DECLARE_SIMPLE_TYPE(Imx8mpEvk, IMX8MP_EVK_MACHINE)
+
+struct Imx8mpEvk {
+    MachineState parent_obj;
+
+    FslImx8mpState soc;
+
+    struct arm_boot_info binfo;
+};
+
 static void imx8mp_evk_modify_dtb(const struct arm_boot_info *info, void *fdt)
 {
     int i, offset;
@@ -46,8 +57,7 @@ static void imx8mp_evk_modify_dtb(const struct arm_boot_info *info, void *fdt)
 
 static void imx8mp_evk_init(MachineState *machine)
 {
-    static struct arm_boot_info boot_info;
-    FslImx8mpState *s;
+    Imx8mpEvk *s = IMX8MP_EVK_MACHINE(machine);
 
     if (machine->ram_size > FSL_IMX8MP_RAM_SIZE_MAX) {
         error_report("RAM size " RAM_ADDR_FMT " above max supported (%08" PRIx64 ")",
@@ -55,18 +65,15 @@ static void imx8mp_evk_init(MachineState *machine)
         exit(1);
     }
 
-    boot_info = (struct arm_boot_info) {
-        .loader_start = FSL_IMX8MP_RAM_START,
-        .board_id = -1,
-        .ram_size = machine->ram_size,
-        .psci_conduit = QEMU_PSCI_CONDUIT_SMC,
-        .modify_dtb = imx8mp_evk_modify_dtb,
-    };
+    s->binfo.loader_start = FSL_IMX8MP_RAM_START;
+    s->binfo.board_id = -1;
+    s->binfo.ram_size = machine->ram_size;
+    s->binfo.psci_conduit = QEMU_PSCI_CONDUIT_SMC;
+    s->binfo.modify_dtb = imx8mp_evk_modify_dtb;
 
-    s = FSL_IMX8MP(object_new(TYPE_FSL_IMX8MP));
-    object_property_add_child(OBJECT(machine), "soc", OBJECT(s));
-    object_property_set_uint(OBJECT(s), "fec1-phy-num", 1, &error_fatal);
-    sysbus_realize_and_unref(SYS_BUS_DEVICE(s), &error_fatal);
+    object_initialize_child(OBJECT(machine), "soc", &s->soc, TYPE_FSL_IMX8MP);
+    object_property_set_uint(OBJECT(&s->soc), "fec1-phy-num", 1, &error_fatal);
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(&s->soc), &error_fatal);
 
     memory_region_add_subregion(get_system_memory(), FSL_IMX8MP_RAM_START,
                                 machine->ram);
@@ -82,22 +89,37 @@ static void imx8mp_evk_init(MachineState *machine)
         }
 
         blk = blk_by_legacy_dinfo(di);
-        bus = qdev_get_child_bus(DEVICE(&s->usdhc[i]), "sd-bus");
+        bus = qdev_get_child_bus(DEVICE(&s->soc.usdhc[i]), "sd-bus");
         carddev = qdev_new(TYPE_SD_CARD);
         qdev_prop_set_drive_err(carddev, "drive", blk, &error_fatal);
         qdev_realize_and_unref(carddev, bus, &error_fatal);
     }
 
     if (!qtest_enabled()) {
-        arm_load_kernel(&s->cpu[0], machine, &boot_info);
+        arm_load_kernel(&s->soc.cpu[0], machine, &s->binfo);
     }
 }
 
-static void imx8mp_evk_machine_init(MachineClass *mc)
+static void imx8mp_evk_machine_class_init(ObjectClass *oc, void *data)
 {
+    MachineClass *mc = MACHINE_CLASS(oc);
+
     mc->desc = "NXP i.MX 8M Plus EVK Board";
     mc->init = imx8mp_evk_init;
     mc->max_cpus = FSL_IMX8MP_NUM_CPUS;
     mc->default_ram_id = "imx8mp-evk.ram";
 }
-DEFINE_MACHINE("imx8mp-evk", imx8mp_evk_machine_init)
+
+static const TypeInfo imx8mp_evk_machine_init_typeinfo = {
+    .name = TYPE_IMX8MP_EVK_MACHINE,
+    .parent = TYPE_MACHINE,
+    .class_init = imx8mp_evk_machine_class_init,
+    .instance_size = sizeof(Imx8mpEvk),
+};
+
+static void imx8mp_evk_machine_init_register_types(void)
+{
+    type_register_static(&imx8mp_evk_machine_init_typeinfo);
+}
+
+type_init(imx8mp_evk_machine_init_register_types)
