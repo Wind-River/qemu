@@ -274,6 +274,60 @@ static void imx8mp_fdt_add_snvs(Imx8mpEvk *s,
     g_free(name);
 }
 
+static void imx8mp_fdt_add_uart(Imx8mpEvk *s,
+                                const char *parent)
+{
+    int i;
+    struct {
+        uint64_t addr;
+        uint64_t size;
+        unsigned int irq;
+    } uart_table[FSL_IMX8MP_NUM_UARTS] = {
+        {
+            fsl_imx8mp_memmap[FSL_IMX8MP_UART1].addr,
+            fsl_imx8mp_memmap[FSL_IMX8MP_UART1].size,
+            FSL_IMX8MP_UART1_IRQ,
+        },
+        {
+            fsl_imx8mp_memmap[FSL_IMX8MP_UART2].addr,
+            fsl_imx8mp_memmap[FSL_IMX8MP_UART2].size,
+            FSL_IMX8MP_UART2_IRQ,
+        },
+        {
+            fsl_imx8mp_memmap[FSL_IMX8MP_UART3].addr,
+            fsl_imx8mp_memmap[FSL_IMX8MP_UART3].size,
+            FSL_IMX8MP_UART3_IRQ,
+        },
+        {
+            fsl_imx8mp_memmap[FSL_IMX8MP_UART4].addr,
+            fsl_imx8mp_memmap[FSL_IMX8MP_UART4].size,
+            FSL_IMX8MP_UART4_IRQ,
+        },
+    };
+
+    for (i = 0; i < FSL_IMX8MP_NUM_UARTS; i++) {
+        char *name = g_strdup_printf("%s/serial@%lx", parent,
+                                     uart_table[i].addr);
+        qemu_fdt_add_subnode(s->fdt, name);
+        qemu_fdt_setprop_cells(s->fdt, name, "clocks",
+                               s->phandle.ccm);
+        qemu_fdt_setprop_cells(s->fdt, name, "interrupts",
+                               GIC_FDT_IRQ_TYPE_SPI,
+                               uart_table[i].irq,
+                               GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+        qemu_fdt_setprop_sized_cells(s->fdt, name, "reg",
+                                     1, uart_table[i].addr,
+                                     1, uart_table[i].size);
+        qemu_fdt_setprop_string(s->fdt, name, "compatible",
+                                "fsl,imx8mp-uart");
+
+        if (i == 1) {
+            qemu_fdt_setprop_string(s->fdt, "/chosen", "stdout-path", name);
+        }
+        g_free(name);
+    }
+}
+
 static void imx8mp_fdt_add_soc(Imx8mpEvk *s,
                                const char *parent)
 {
@@ -288,6 +342,7 @@ static void imx8mp_fdt_add_soc(Imx8mpEvk *s,
     qemu_fdt_setprop_cell(s->fdt, name, "#address-cells", 0x1);
     qemu_fdt_setprop_string(s->fdt, name, "compatible", "simple-bus");
 
+    imx8mp_fdt_add_uart(s, name);
     imx8mp_fdt_add_ccm(s, name);
     imx8mp_fdt_add_gpio(s, name);
     imx8mp_fdt_add_anatop(s, name);
