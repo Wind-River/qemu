@@ -12,6 +12,8 @@
 #include "hw/arm/fsl-imx8mp.h"
 #include "hw/boards.h"
 #include "hw/qdev-properties.h"
+#include "hw/arm/fdt.h"
+#include "system/device_tree.h"
 #include "system/qtest.h"
 #include "qemu/error-report.h"
 #include "qapi/error.h"
@@ -26,7 +28,10 @@ struct Imx8mpEvk {
     FslImx8mpState soc;
 
     struct arm_boot_info binfo;
+
+    void *fdt;
 };
+
 
 static void imx8mp_evk_modify_dtb(const struct arm_boot_info *info, void *fdt)
 {
@@ -55,6 +60,40 @@ static void imx8mp_evk_modify_dtb(const struct arm_boot_info *info, void *fdt)
     }
 }
 
+static void *imx8mp_evk_get_dtb(const struct arm_boot_info *binfo)
+{
+    const Imx8mpEvk *s = container_of(binfo, Imx8mpEvk, binfo);
+
+    return s->fdt;
+}
+
+static void imx8mp_fdt_create(Imx8mpEvk *s)
+{
+    MachineClass *mc = MACHINE_GET_CLASS(s);
+    char *root;
+    int fdt_size;
+
+    s->fdt = create_device_tree(&fdt_size);
+    if (!s->fdt) {
+        error_report("imx8mp_fdt_create failed");
+        exit(1);
+    }
+
+    /* Device Tree Root */
+    root = g_strdup_printf("/");
+
+    /* Header */
+    qemu_fdt_setprop_cell(s->fdt, root, "#size-cells", 0x2);
+    qemu_fdt_setprop_cell(s->fdt, root, "#address-cells", 0x2);
+    qemu_fdt_setprop_string(s->fdt, root, "model", mc->desc);
+    qemu_fdt_setprop_string(s->fdt, root, "compatible", "fsl,imx8mp");
+
+    /* Chosen node */
+    qemu_fdt_add_subnode(s->fdt, "/chosen");
+
+    g_free(root);
+}
+
 static void imx8mp_evk_init(MachineState *machine)
 {
     Imx8mpEvk *s = IMX8MP_EVK_MACHINE(machine);
@@ -70,6 +109,7 @@ static void imx8mp_evk_init(MachineState *machine)
     s->binfo.ram_size = machine->ram_size;
     s->binfo.psci_conduit = QEMU_PSCI_CONDUIT_SMC;
     s->binfo.modify_dtb = imx8mp_evk_modify_dtb;
+    s->binfo.get_dtb = imx8mp_evk_get_dtb;
 
     object_initialize_child(OBJECT(machine), "soc", &s->soc, TYPE_FSL_IMX8MP);
     object_property_set_uint(OBJECT(&s->soc), "fec1-phy-num", 1, &error_fatal);
@@ -94,6 +134,8 @@ static void imx8mp_evk_init(MachineState *machine)
         qdev_prop_set_drive_err(carddev, "drive", blk, &error_fatal);
         qdev_realize_and_unref(carddev, bus, &error_fatal);
     }
+
+    imx8mp_fdt_create(s);
 
     if (!qtest_enabled()) {
         arm_load_kernel(&s->soc.cpu[0], machine, &s->binfo);
