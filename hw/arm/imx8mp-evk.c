@@ -175,6 +175,74 @@ static void imx8mp_fdt_add_ccm(Imx8mpEvk *s,
     g_free(name);
 }
 
+static void imx8mp_fdt_add_gpio(Imx8mpEvk *s,
+                                const char *parent)
+{
+    int i;
+    struct {
+        uint64_t addr;
+        uint64_t size;
+        unsigned int irq_low;
+        unsigned int irq_high;
+    } gpio_table[FSL_IMX8MP_NUM_GPIOS] = {
+        {
+            fsl_imx8mp_memmap[FSL_IMX8MP_GPIO1].addr,
+            fsl_imx8mp_memmap[FSL_IMX8MP_GPIO1].size,
+            FSL_IMX8MP_GPIO1_LOW_IRQ,
+            FSL_IMX8MP_GPIO1_HIGH_IRQ
+        },
+        {
+            fsl_imx8mp_memmap[FSL_IMX8MP_GPIO2].addr,
+            fsl_imx8mp_memmap[FSL_IMX8MP_GPIO2].size,
+            FSL_IMX8MP_GPIO2_LOW_IRQ,
+            FSL_IMX8MP_GPIO2_HIGH_IRQ
+        },
+        {
+            fsl_imx8mp_memmap[FSL_IMX8MP_GPIO3].addr,
+            fsl_imx8mp_memmap[FSL_IMX8MP_GPIO3].size,
+            FSL_IMX8MP_GPIO3_LOW_IRQ,
+            FSL_IMX8MP_GPIO3_HIGH_IRQ
+        },
+        {
+            fsl_imx8mp_memmap[FSL_IMX8MP_GPIO4].addr,
+            fsl_imx8mp_memmap[FSL_IMX8MP_GPIO4].size,
+            FSL_IMX8MP_GPIO4_LOW_IRQ,
+            FSL_IMX8MP_GPIO4_HIGH_IRQ
+        },
+        {
+            fsl_imx8mp_memmap[FSL_IMX8MP_GPIO5].addr,
+            fsl_imx8mp_memmap[FSL_IMX8MP_GPIO5].size,
+            FSL_IMX8MP_GPIO5_LOW_IRQ,
+            FSL_IMX8MP_GPIO5_HIGH_IRQ
+        },
+    };
+
+    for (i = 0; i < FSL_IMX8MP_NUM_GPIOS; i++) {
+        char *name = g_strdup_printf("%s/gpio@%lx", parent,
+                                     gpio_table[i].addr);
+        qemu_fdt_add_subnode(s->fdt, name);
+        qemu_fdt_setprop_cell(s->fdt, name, "#interrupt-cells", 2);
+        qemu_fdt_setprop(s->fdt, name, "interrupt-controller", NULL, 0);
+        qemu_fdt_setprop_cell(s->fdt, name, "#gpio-cells", 2);
+        qemu_fdt_setprop(s->fdt, name, "gpio-controller", NULL, 0);
+        qemu_fdt_setprop_cells(s->fdt, name, "clocks",
+                               s->phandle.ccm);
+        qemu_fdt_setprop_cells(s->fdt, name, "interrupts",
+                               GIC_FDT_IRQ_TYPE_SPI,
+                               gpio_table[i].irq_low,
+                               GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+                               GIC_FDT_IRQ_TYPE_SPI,
+                               gpio_table[i].irq_high,
+                               GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+        qemu_fdt_setprop_sized_cells(s->fdt, name, "reg",
+                                     1, gpio_table[i].addr,
+                                     1, gpio_table[i].size);
+        qemu_fdt_setprop_string(s->fdt, name, "compatible",
+                                "fsl,imx8mp-gpio");
+        g_free(name);
+    }
+}
+
 static void imx8mp_fdt_add_soc(Imx8mpEvk *s,
                                const char *parent)
 {
@@ -190,6 +258,7 @@ static void imx8mp_fdt_add_soc(Imx8mpEvk *s,
     qemu_fdt_setprop_string(s->fdt, name, "compatible", "simple-bus");
 
     imx8mp_fdt_add_ccm(s, name);
+    imx8mp_fdt_add_gpio(s, name);
 
     g_free(name);
 }
