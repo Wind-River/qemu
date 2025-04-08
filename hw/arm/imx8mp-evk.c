@@ -34,6 +34,12 @@ struct Imx8mpEvk {
 
     struct {
         uint32_t gic;
+        uint32_t osc_32k;
+        uint32_t osc_24m;
+        uint32_t clk_ext1;
+        uint32_t clk_ext2;
+        uint32_t clk_ext3;
+        uint32_t clk_ext4;
     } phandle;
 };
 
@@ -129,6 +135,25 @@ static void imx8mp_fdt_add_gic(Imx8mpEvk *s,
     g_free(name);
 }
 
+static void imx8mp_fdt_add_clock(Imx8mpEvk *s,
+                                 const char *clockname,
+                                 const char *clock_output,
+                                 const char *parent,
+                                 unsigned freq,
+                                 uint32_t phandle)
+{
+    char *name;
+
+    name = g_strdup_printf("%s/%s", parent, clockname);
+    qemu_fdt_add_subnode(s->fdt, name);
+    qemu_fdt_setprop_cell(s->fdt, name, "phandle", phandle);
+    qemu_fdt_setprop_string(s->fdt, name, "clock-output-names", clock_output);
+    qemu_fdt_setprop_cell(s->fdt, name, "clock-frequency", freq);
+    qemu_fdt_setprop_cell(s->fdt, name, "#clock-cells", 0x0);
+    qemu_fdt_setprop_string(s->fdt, name, "compatible", "fixed-clock");
+    g_free(name);
+}
+
 static void imx8mp_fdt_create(Imx8mpEvk *s,
                               MachineState *machine)
 {
@@ -144,6 +169,12 @@ static void imx8mp_fdt_create(Imx8mpEvk *s,
 
     /* Allocate phandles */
     s->phandle.gic = qemu_fdt_alloc_phandle(s->fdt);
+    s->phandle.osc_32k = qemu_fdt_alloc_phandle(s->fdt);
+    s->phandle.osc_24m = qemu_fdt_alloc_phandle(s->fdt);
+    s->phandle.clk_ext1 = qemu_fdt_alloc_phandle(s->fdt);
+    s->phandle.clk_ext2 = qemu_fdt_alloc_phandle(s->fdt);
+    s->phandle.clk_ext3 = qemu_fdt_alloc_phandle(s->fdt);
+    s->phandle.clk_ext4 = qemu_fdt_alloc_phandle(s->fdt);
 
     /* Device Tree Root */
     root = g_strdup_printf("/");
@@ -160,6 +191,18 @@ static void imx8mp_fdt_create(Imx8mpEvk *s,
 
     imx8mp_fdt_add_cpus(s, machine, root);
     imx8mp_fdt_add_gic(s, root);
+    imx8mp_fdt_add_clock(s, "clock-osc-32k", "osc_32k", root,
+                         0x8000, s->phandle.osc_32k);
+    imx8mp_fdt_add_clock(s, "clock-osc-24m", "osc_24m", root,
+                         0x16e3600, s->phandle.osc_24m);
+    imx8mp_fdt_add_clock(s, "clock-ext1", "clk_ext1", root,
+                         0x7ed6b40, s->phandle.clk_ext1);
+    imx8mp_fdt_add_clock(s, "clock-ext2", "clk_ext2", root,
+                         0x7ed6b40, s->phandle.clk_ext2);
+    imx8mp_fdt_add_clock(s, "clock-ext3", "clk_ext3", root,
+                         0x7ed6b40, s->phandle.clk_ext3);
+    imx8mp_fdt_add_clock(s, "clock-ext4", "clk_ext4", root,
+                         0x7ed6b40, s->phandle.clk_ext4);
 
     g_free(root);
 }
