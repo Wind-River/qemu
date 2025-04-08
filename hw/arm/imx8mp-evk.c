@@ -243,6 +243,21 @@ static void imx8mp_fdt_add_gpio(Imx8mpEvk *s,
     }
 }
 
+static void imx8mp_fdt_add_anatop(Imx8mpEvk *s,
+                                  const char *parent)
+{
+    char *name;
+
+    name = g_strdup_printf("%s/anatop@%lx", parent,
+                           fsl_imx8mp_memmap[FSL_IMX8MP_ANA_PLL].addr);
+    qemu_fdt_add_subnode(s->fdt, name);
+    qemu_fdt_setprop_sized_cells(s->fdt, name, "reg",
+                                 1, fsl_imx8mp_memmap[FSL_IMX8MP_ANA_PLL].addr,
+                                 1, fsl_imx8mp_memmap[FSL_IMX8MP_ANA_PLL].size);
+    qemu_fdt_setprop_string(s->fdt, name, "compatible", "fsl,imx8mp-anatop");
+    g_free(name);
+}
+
 static void imx8mp_fdt_add_soc(Imx8mpEvk *s,
                                const char *parent)
 {
@@ -259,6 +274,7 @@ static void imx8mp_fdt_add_soc(Imx8mpEvk *s,
 
     imx8mp_fdt_add_ccm(s, name);
     imx8mp_fdt_add_gpio(s, name);
+    imx8mp_fdt_add_anatop(s, name);
 
     g_free(name);
 }
