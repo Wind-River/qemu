@@ -154,6 +154,23 @@ static void imx8mp_fdt_add_clock(Imx8mpEvk *s,
     g_free(name);
 }
 
+static void imx8mp_fdt_add_soc(Imx8mpEvk *s,
+                               const char *parent)
+{
+    char *name;
+
+    name = g_strdup_printf("%s/soc@0", parent);
+    qemu_fdt_add_subnode(s->fdt, name);
+    qemu_fdt_setprop_sized_cells(s->fdt, name, "ranges",
+                                 2, 0,
+                                 2, 0x3e000000);
+    qemu_fdt_setprop_cell(s->fdt, name, "#size-cells", 0x1);
+    qemu_fdt_setprop_cell(s->fdt, name, "#address-cells", 0x1);
+    qemu_fdt_setprop_string(s->fdt, name, "compatible", "simple-bus");
+
+    g_free(name);
+}
+
 static void imx8mp_fdt_create(Imx8mpEvk *s,
                               MachineState *machine)
 {
@@ -203,6 +220,7 @@ static void imx8mp_fdt_create(Imx8mpEvk *s,
                          0x7ed6b40, s->phandle.clk_ext3);
     imx8mp_fdt_add_clock(s, "clock-ext4", "clk_ext4", root,
                          0x7ed6b40, s->phandle.clk_ext4);
+    imx8mp_fdt_add_soc(s, root);
 
     g_free(root);
 }
