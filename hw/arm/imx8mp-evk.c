@@ -455,6 +455,31 @@ static void imx8mp_fdt_add_gpt_timer(Imx8mpEvk *s,
     g_free(name);
 }
 
+static void imx8mp_fdt_add_timer(Imx8mpEvk *s,
+                                 const char *parent)
+{
+    char *name;
+
+    name = g_strdup_printf("%s/timer", parent);
+
+    qemu_fdt_add_subnode(s->fdt, name);
+
+    qemu_fdt_setprop_cells(s->fdt, name, "interrupts",
+                           GIC_FDT_IRQ_TYPE_PPI,
+                           INTID_TO_PPI(ARCH_TIMER_S_EL1_IRQ),
+                           GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+                           GIC_FDT_IRQ_TYPE_PPI,
+                           INTID_TO_PPI(ARCH_TIMER_NS_EL1_IRQ),
+                           GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+                           GIC_FDT_IRQ_TYPE_PPI,
+                           INTID_TO_PPI(ARCH_TIMER_VIRT_IRQ),
+                           GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+                           GIC_FDT_IRQ_TYPE_PPI,
+                           INTID_TO_PPI(ARCH_TIMER_NS_EL2_IRQ),
+                           GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+    qemu_fdt_setprop_string(s->fdt, name, "compatible", "arm,armv8-timer");
+}
+
 static void imx8mp_fdt_create(Imx8mpEvk *s,
                               MachineState *machine)
 {
@@ -494,6 +519,7 @@ static void imx8mp_fdt_create(Imx8mpEvk *s,
 
     imx8mp_fdt_add_cpus(s, machine, root);
     imx8mp_fdt_add_gic(s, root);
+    imx8mp_fdt_add_timer(s, root);
     imx8mp_fdt_add_clock(s, "clock-osc-32k", "osc_32k", root,
                          0x8000, s->phandle.osc_32k);
     imx8mp_fdt_add_clock(s, "clock-osc-24m", "osc_24m", root,
