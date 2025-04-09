@@ -41,6 +41,7 @@ struct Imx8mpEvk {
         uint32_t clk_ext3;
         uint32_t clk_ext4;
         uint32_t ccm;
+        uint32_t ethernet_phy;
     } phandle;
 };
 
@@ -328,6 +329,85 @@ static void imx8mp_fdt_add_uart(Imx8mpEvk *s,
     }
 }
 
+static void imx8mp_fdt_add_eth_phy(Imx8mpEvk *s,
+                                   uint32_t phy_id,
+                                   const char *parent)
+{
+    char *name;
+
+    name = g_strdup_printf("%s/ethernet-phy@%u", parent, phy_id);
+    qemu_fdt_add_subnode(s->fdt, name);
+    qemu_fdt_setprop_cell(s->fdt, name, "phandle",
+                          s->phandle.ethernet_phy);
+    qemu_fdt_setprop(s->fdt, name, "eee-broken-1000t", NULL, 0);
+    qemu_fdt_setprop_sized_cells(s->fdt, name, "reg", 1, phy_id);
+    qemu_fdt_setprop_string(s->fdt, name, "compatible",
+                            "ethernet-phy-ieee802.3-c22");
+
+    g_free(name);
+}
+
+static void imx8mp_fdt_add_mdio(Imx8mpEvk *s,
+                                const char *parent)
+{
+    char *name;
+
+    name = g_strdup_printf("%s/mdio", parent);
+    qemu_fdt_add_subnode(s->fdt, name);
+    qemu_fdt_setprop_cell(s->fdt, name, "#size-cells", 0x0);
+    qemu_fdt_setprop_cell(s->fdt, name, "#address-cells", 0x1);
+
+    imx8mp_fdt_add_eth_phy(s, 1, name);
+
+    g_free(name);
+}
+
+
+static void imx8mp_fdt_add_enet(Imx8mpEvk *s,
+                                const char *parent)
+{
+    char *name;
+    static const char * const clk_names[5] = {
+        "ipg", "ahb", "ptp", "enet_clk_ref", "enet_out"
+    };
+
+    name = g_strdup_printf("%s/ethernet@%lx", parent,
+                           fsl_imx8mp_memmap[FSL_IMX8MP_ENET1].addr);
+    qemu_fdt_add_subnode(s->fdt, name);
+    qemu_fdt_setprop(s->fdt, name, "fsl,magic-packet", NULL, 0);
+    qemu_fdt_setprop_cell(s->fdt, name, "phy-handle",
+                          s->phandle.ethernet_phy);
+    qemu_fdt_setprop_string(s->fdt, name, "phy-mode", "rgmii-id");
+    qemu_fdt_setprop_cell(s->fdt, name, "fsl,wakeup_irq", 0x2);
+    qemu_fdt_setprop(s->fdt, name, "nvmem_macaddr_swap", NULL, 0);
+    qemu_fdt_setprop_string(s->fdt, name, "nvmem-cell-names", "mac-address");
+    qemu_fdt_setprop_cell(s->fdt, name, "nvmem-cells", 0x4b);
+    qemu_fdt_setprop_cell(s->fdt, name, "fsl,num-rx-queues", 0x03);
+    qemu_fdt_setprop_cell(s->fdt, name, "fsl,num-tx-queues", 0x03);
+    qemu_fdt_setprop_cells(s->fdt, name, "clocks", s->phandle.ccm);
+    qemu_fdt_setprop_string_array(s->fdt, name, "clock-names",
+                                  (char **)&clk_names, ARRAY_SIZE(clk_names));
+    qemu_fdt_setprop_cells(s->fdt, name, "interrupts",
+                           GIC_FDT_IRQ_TYPE_SPI,
+                           FSL_IMX8MP_ENET1_MAC_IRQ,
+                           GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+                           GIC_FDT_IRQ_TYPE_SPI,
+                           FSL_IMX8MP_ENET1_MAC_IRQ + 1,
+                           GIC_FDT_IRQ_FLAGS_LEVEL_HI,
+                           GIC_FDT_IRQ_TYPE_SPI,
+                           FSL_IMX8MP_ENET1_MAC_IRQ + 2,
+                           GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+    qemu_fdt_setprop_sized_cells(s->fdt, name, "reg",
+                                 1, fsl_imx8mp_memmap[FSL_IMX8MP_ENET1].addr,
+                                 1, fsl_imx8mp_memmap[FSL_IMX8MP_ENET1].size);
+    qemu_fdt_setprop_string(s->fdt, name, "compatible",
+                            "fsl,imx8mq-fec");
+
+    imx8mp_fdt_add_mdio(s, name);
+
+    g_free(name);
+}
+
 static void imx8mp_fdt_add_soc(Imx8mpEvk *s,
                                const char *parent)
 {
@@ -342,6 +422,7 @@ static void imx8mp_fdt_add_soc(Imx8mpEvk *s,
     qemu_fdt_setprop_cell(s->fdt, name, "#address-cells", 0x1);
     qemu_fdt_setprop_string(s->fdt, name, "compatible", "simple-bus");
 
+    imx8mp_fdt_add_enet(s, name);
     imx8mp_fdt_add_uart(s, name);
     imx8mp_fdt_add_ccm(s, name);
     imx8mp_fdt_add_gpio(s, name);
@@ -396,6 +477,7 @@ static void imx8mp_fdt_create(Imx8mpEvk *s,
     s->phandle.clk_ext3 = qemu_fdt_alloc_phandle(s->fdt);
     s->phandle.clk_ext4 = qemu_fdt_alloc_phandle(s->fdt);
     s->phandle.ccm = qemu_fdt_alloc_phandle(s->fdt);
+    s->phandle.ethernet_phy = qemu_fdt_alloc_phandle(s->fdt);
 
     /* Device Tree Root */
     root = g_strdup_printf("/");
