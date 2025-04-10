@@ -160,15 +160,66 @@ static void imx8mp_fdt_add_ccm(Imx8mpEvk *s,
                                const char *parent)
 {
     char *name;
+    static const char * const clk_names[6] = {
+        "osc_32k", "osc_24m", "clk_ext1", "clk_ext2", "clk_ext3", "clk_ext4"
+    };
+
 
     name = g_strdup_printf("%s/clock-controller@%lx", parent,
                            fsl_imx8mp_memmap[FSL_IMX8MP_CCM].addr);
     qemu_fdt_add_subnode(s->fdt, name);
     qemu_fdt_setprop_cell(s->fdt, name, "phandle", s->phandle.ccm);
+    qemu_fdt_setprop_cell(s->fdt, name, "init-on-array", 0x10c);
+    qemu_fdt_setprop_cells(s->fdt, name, "assigned-clock-rates",
+                           0x3b9aca00,
+                           0x2faf0800,
+                           0x1dcd6500,
+                           0x17d78400,
+                           0x2faf0800,
+                           0x17d78400,
+                           0x17700000,
+                           0x15888000,
+                           0x3df582e0);
+    qemu_fdt_setprop_cells(s->fdt, name, "assigned-clock-parents",
+                           s->phandle.ccm,
+                           0x41,
+                           s->phandle.ccm,
+                           0x38,
+                           s->phandle.ccm,
+                           0x40,
+                           s->phandle.ccm,
+                           0x38,
+                           s->phandle.ccm,
+                           0x38);
+    qemu_fdt_setprop_cells(s->fdt, name, "assigned-clocks",
+                           s->phandle.ccm,
+                           0x67,
+                           s->phandle.ccm,
+                           0x68,
+                           s->phandle.ccm,
+                           0x94,
+                           s->phandle.ccm,
+                           0x6c,
+                           s->phandle.ccm,
+                           0x48,
+                           s->phandle.ccm,
+                           0x6f,
+                           s->phandle.ccm,
+                           0x12,
+                           s->phandle.ccm,
+                           0x13,
+                           s->phandle.ccm,
+                           0x14);
+    qemu_fdt_setprop_string_array(s->fdt, name, "clock-names",
+                                  (char **)&clk_names, ARRAY_SIZE(clk_names));
     qemu_fdt_setprop_cells(s->fdt, name, "clocks",
                            s->phandle.osc_32k,
-                           s->phandle.osc_24m);
-    qemu_fdt_setprop_cell(s->fdt, name, "#clock-cells", 0x0);
+                           s->phandle.osc_24m,
+                           s->phandle.clk_ext1,
+                           s->phandle.clk_ext2,
+                           s->phandle.clk_ext3,
+                           s->phandle.clk_ext4);
+    qemu_fdt_setprop_cell(s->fdt, name, "#clock-cells", 0x1);
     qemu_fdt_setprop_sized_cells(s->fdt, name, "reg",
                                  1, fsl_imx8mp_memmap[FSL_IMX8MP_CCM].addr,
                                  1, fsl_imx8mp_memmap[FSL_IMX8MP_CCM].size);
@@ -227,7 +278,7 @@ static void imx8mp_fdt_add_gpio(Imx8mpEvk *s,
         qemu_fdt_setprop_cell(s->fdt, name, "#gpio-cells", 2);
         qemu_fdt_setprop(s->fdt, name, "gpio-controller", NULL, 0);
         qemu_fdt_setprop_cells(s->fdt, name, "clocks",
-                               s->phandle.ccm);
+                               s->phandle.ccm, 0xc1);
         qemu_fdt_setprop_cells(s->fdt, name, "interrupts",
                                GIC_FDT_IRQ_TYPE_SPI,
                                gpio_table[i].irq_low,
@@ -283,26 +334,31 @@ static void imx8mp_fdt_add_uart(Imx8mpEvk *s,
         uint64_t addr;
         uint64_t size;
         unsigned int irq;
+        unsigned int clk_specifier;
     } uart_table[FSL_IMX8MP_NUM_UARTS] = {
         {
             fsl_imx8mp_memmap[FSL_IMX8MP_UART1].addr,
             fsl_imx8mp_memmap[FSL_IMX8MP_UART1].size,
             FSL_IMX8MP_UART1_IRQ,
+            0xfb,
         },
         {
             fsl_imx8mp_memmap[FSL_IMX8MP_UART2].addr,
             fsl_imx8mp_memmap[FSL_IMX8MP_UART2].size,
             FSL_IMX8MP_UART2_IRQ,
+            0xfc,
         },
         {
             fsl_imx8mp_memmap[FSL_IMX8MP_UART3].addr,
             fsl_imx8mp_memmap[FSL_IMX8MP_UART3].size,
             FSL_IMX8MP_UART3_IRQ,
+            0xfd,
         },
         {
             fsl_imx8mp_memmap[FSL_IMX8MP_UART4].addr,
             fsl_imx8mp_memmap[FSL_IMX8MP_UART4].size,
             FSL_IMX8MP_UART4_IRQ,
+            0xfe,
         },
     };
 
@@ -311,7 +367,8 @@ static void imx8mp_fdt_add_uart(Imx8mpEvk *s,
                                      uart_table[i].addr);
         qemu_fdt_add_subnode(s->fdt, name);
         qemu_fdt_setprop_cells(s->fdt, name, "clocks",
-                               s->phandle.ccm);
+                               s->phandle.ccm,
+                               uart_table[i].clk_specifier);
         qemu_fdt_setprop_cells(s->fdt, name, "interrupts",
                                GIC_FDT_IRQ_TYPE_SPI,
                                uart_table[i].irq,
@@ -384,9 +441,37 @@ static void imx8mp_fdt_add_enet(Imx8mpEvk *s,
     qemu_fdt_setprop_cell(s->fdt, name, "nvmem-cells", 0x4b);
     qemu_fdt_setprop_cell(s->fdt, name, "fsl,num-rx-queues", 0x03);
     qemu_fdt_setprop_cell(s->fdt, name, "fsl,num-tx-queues", 0x03);
-    qemu_fdt_setprop_cells(s->fdt, name, "clocks", s->phandle.ccm);
+    qemu_fdt_setprop_cells(s->fdt, name, "assigned-clock-rates",
+                           0x00, 0x00, 0x7735940, 0x5f5e100);
+    qemu_fdt_setprop_cells(s->fdt, name, "assigned-clock-parents",
+                           s->phandle.ccm,
+                           0x36,
+                           s->phandle.ccm,
+                           0x3a,
+                           s->phandle.ccm,
+                           0x3b);
+    qemu_fdt_setprop_cells(s->fdt, name, "assigned-clocks",
+                           s->phandle.ccm,
+                           0x5e,
+                           s->phandle.ccm,
+                           0x84,
+                           s->phandle.ccm,
+                           0x83,
+                           s->phandle.ccm,
+                           0x84);
     qemu_fdt_setprop_string_array(s->fdt, name, "clock-names",
                                   (char **)&clk_names, ARRAY_SIZE(clk_names));
+    qemu_fdt_setprop_cells(s->fdt, name, "clocks",
+                           s->phandle.ccm,
+                           0xc0,
+                           s->phandle.ccm,
+                           0xf2,
+                           s->phandle.ccm,
+                           0x84,
+                           s->phandle.ccm,
+                           0x83,
+                           s->phandle.ccm,
+                           0x85);
     qemu_fdt_setprop_cells(s->fdt, name, "interrupts",
                            GIC_FDT_IRQ_TYPE_SPI,
                            FSL_IMX8MP_ENET1_MAC_IRQ,
@@ -447,7 +532,7 @@ static void imx8mp_fdt_add_gpt_timer(Imx8mpEvk *s,
                            FSL_IMX8MP_GPT1_IRQ,
                            GIC_FDT_IRQ_FLAGS_LEVEL_HI);
     qemu_fdt_setprop_cells(s->fdt, name, "clocks",
-                           s->phandle.ccm);
+                           s->phandle.ccm, 0xc6);
     qemu_fdt_setprop_sized_cells(s->fdt, name, "reg",
                                  2, fsl_imx8mp_memmap[FSL_IMX8MP_GPT1].addr,
                                  2, fsl_imx8mp_memmap[FSL_IMX8MP_GPT1].size);
