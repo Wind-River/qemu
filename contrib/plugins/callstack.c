@@ -35,6 +35,15 @@ typedef struct {
     GMutex lock;          /* Lock for this cache entry */
 } VCPUCache;
 
+/* Struct to hold parsed instruction info */
+typedef struct {
+    bool is_call;
+    bool is_ret;
+    char reg_name[4];  // For storing register name from blr
+    uint64_t target;   // For storing immediate from bl
+    uint64_t insn_addr;  // Original instruction address for fallback
+} InsnInfo;
+
 /* Global state */
 static GHashTable *process_stacks;
 static GMutex stacks_lock;
@@ -118,6 +127,35 @@ static uint64_t read_current_ttbr(void)
     return current_ttbr;
 }
 
+static uint64_t read_gp_register(const char *reg_name)
+{
+    GArray *reg_list = qemu_plugin_get_registers();
+    uint64_t value = 0;
+    
+    if (!reg_list) {
+        return 0;
+    }
+
+    for (int i = 0; i < reg_list->len; i++) {
+        qemu_plugin_reg_descriptor *desc = &g_array_index(reg_list, 
+            qemu_plugin_reg_descriptor, i);
+        if (g_ascii_strcasecmp(desc->name, reg_name) == 0) {
+            GByteArray *reg_buf = g_byte_array_new();
+            int regsize = qemu_plugin_read_register(desc->handle, reg_buf);
+            
+            if (regsize > 0) {
+                for (int j = regsize-1; j >= 0; j--) {
+                    value = (value << 8) | reg_buf->data[j];
+                }
+            }
+            g_byte_array_free(reg_buf, TRUE);
+            break;
+        }
+    }
+    g_array_free(reg_list, TRUE);
+    return value;
+}
+
 static void vcpu_ttbr_exec(unsigned int cpu_index, void *udata)
 {
     VCPUCache *cache = get_vcpu_cache(cpu_index);
@@ -152,20 +190,16 @@ static uint64_t get_current_ttbr_cached(unsigned int cpu_index)
 
 static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
 {
-    struct qemu_plugin_insn *insn = (struct qemu_plugin_insn *)udata;
+    InsnInfo *info = (InsnInfo *)udata;
     ProcessCallStack *stack;
-    const char *sym;
-    bool is_call, is_ret;
+    const char *sym = "<unknown>";
+    uint64_t target_addr;
 
-    if (!insn) {
+    if (!info) {
         return;
     }
     
-    /* Get flags from userdata */
-    is_call = ((uintptr_t)udata & 1) == 1;
-    is_ret = ((uintptr_t)udata & 2) == 2;
-
-    if (!is_call && !is_ret) {
+    if (!info->is_call && !info->is_ret) {
         return;
     }
 
@@ -177,15 +211,22 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
     
     g_mutex_lock(&stack->lock);
     
-    if (is_call) {
+    if (info->is_call) {
         if (stack->depth < MAX_CALLSTACK_DEPTH - 1) {
-            uint64_t pc = qemu_plugin_insn_vaddr(insn);
-            stack->entries[stack->depth].addr = pc;
-            sym = qemu_plugin_insn_symbol(insn);
-            stack->entries[stack->depth].symbol = sym ? sym : "<unknown>";
+            if (info->reg_name[0]) { // This is a blr instruction
+                target_addr = read_gp_register(info->reg_name);
+                if (target_addr == 0) {
+                    target_addr = info->insn_addr; // fallback
+                }
+            } else { // This is a bl instruction
+                target_addr = info->target;
+            }
+            
+            stack->entries[stack->depth].addr = target_addr;
+            stack->entries[stack->depth].symbol = sym;
             stack->depth++;
         }
-    } else if (is_ret && stack->depth > 0) {
+    } else if (info->is_ret && stack->depth > 0) {
         stack->depth--;
     }
     
@@ -210,25 +251,43 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
             continue;
         }
 
-        /* On AArch64:
-           - bl/blr are call instructions
-           - ret is return instruction 
-           - msr ttbr changes address space */
-        if (g_str_has_prefix(disas, "bl ") || g_str_has_prefix(disas, "blr ")) {
-            uintptr_t tagged = (uintptr_t)insn | 1;  // Mark as call
-            qemu_plugin_register_vcpu_insn_exec_cb(insn, vcpu_insn_exec,
-                                                 QEMU_PLUGIN_CB_R_REGS,
-                                                 (void *)tagged);
-        } else if (g_str_has_prefix(disas, "ret")) {
-            uintptr_t tagged = (uintptr_t)insn | 2;  // Mark as return
-            qemu_plugin_register_vcpu_insn_exec_cb(insn, vcpu_insn_exec,
-                                                 QEMU_PLUGIN_CB_R_REGS,
-                                                 (void *)tagged);
-        } else if (g_str_has_prefix(disas, "msr ttbr")) {
+        /* Register TTBR exec callback for MSR instructions that might modify TTBR */
+        if (g_str_has_prefix(disas, "msr ") && strstr(disas, "ttbr")) {
             qemu_plugin_register_vcpu_insn_exec_cb(insn, vcpu_ttbr_exec,
-                                                 QEMU_PLUGIN_CB_NO_REGS,
-                                                 NULL);
+                                                 QEMU_PLUGIN_CB_R_REGS, NULL);
         }
+
+        /* Handle branch instructions */
+        if (g_str_has_prefix(disas, "bl ") || g_str_has_prefix(disas, "blr ") || 
+            g_str_has_prefix(disas, "ret")) {
+            InsnInfo *info = g_new0(InsnInfo, 1);
+            info->insn_addr = qemu_plugin_insn_vaddr(insn);
+            
+            if (g_str_has_prefix(disas, "bl ")) {
+                info->is_call = true;
+                /* Parse immediate from disassembly */
+                char *offset_str = strchr(disas, '#');
+                if (offset_str) {
+                    info->target = strtoull(offset_str + 1, NULL, 16);
+                } else {
+                    info->target = info->insn_addr; /* fallback */
+                }
+            } else if (g_str_has_prefix(disas, "blr ")) {
+                info->is_call = true;
+                /* Parse register name */
+                char *reg_str = disas + 4; /* Skip "blr " */
+                while (*reg_str == ' ') reg_str++; /* Skip spaces */
+                strncpy(info->reg_name, reg_str, sizeof(info->reg_name) - 1);
+                info->reg_name[sizeof(info->reg_name) - 1] = '\0';
+            } else { // ret instruction
+                info->is_ret = true;
+            }
+
+            qemu_plugin_register_vcpu_insn_exec_cb(insn, vcpu_insn_exec,
+                                                 QEMU_PLUGIN_CB_R_REGS,
+                                                 info);
+        }
+
         g_free(disas);
     }
 }
