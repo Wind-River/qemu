@@ -30,7 +30,8 @@ typedef struct {
 
 /* Per-vCPU TTBR cache */
 typedef struct {
-    uint64_t ttbr;         /* Cached TTBR value */
+    uint64_t ttbr0;         /* Cached TTBR value */
+    uint64_t ttbr1;         /* Cached TTBR value */
     bool ttbr_dirty;       /* Flag indicating if cache needs refresh */
     GMutex lock;          /* Lock for this cache entry */
 } VCPUCache;
@@ -97,34 +98,55 @@ static ProcessCallStack *get_process_stack(uint64_t ttbr)
     return stack;
 }
 
-static uint64_t read_current_ttbr(void)
+static void read_current_ttbr(VCPUCache *cache)
 {
-    g_autoptr(GString) ttbr_reg_prefix = g_string_new("TTBR");
+    g_autoptr(GString) ttbr0_reg_prefix = g_string_new("TTBR0_EL1");
+    g_autoptr(GString) ttbr1_reg_prefix = g_string_new("TTBR1_EL1");
     GArray *reg_list = qemu_plugin_get_registers();
-    uint64_t current_ttbr = 0;
-    
+    bool ttbr0_seen = false;
+    bool ttbr1_seen = false;
+
+    /* reset cached ttbr values */
+    cache->ttbr0 = 0;
+    cache->ttbr1 = 0;
+
     if (!reg_list) {
-        return 0;
+        return;
     }
 
     for (int i = 0; i < reg_list->len; i++) {
         qemu_plugin_reg_descriptor *desc = &g_array_index(reg_list, 
             qemu_plugin_reg_descriptor, i);
-        if (strncmp(desc->name, ttbr_reg_prefix->str, ttbr_reg_prefix->len) == 0) {
+        if (strncmp(desc->name, ttbr0_reg_prefix->str, ttbr0_reg_prefix->len) == 0) {
+            GByteArray *reg_buf = g_byte_array_new();
+            int regsize = qemu_plugin_read_register(desc->handle, reg_buf);
+
+            if (regsize > 0) {
+                for (int j = regsize-1; j >= 0; j--) {
+                    cache->ttbr0 = (cache->ttbr0 << 8) | reg_buf->data[j];
+                }
+            }
+            g_byte_array_free(reg_buf, TRUE);
+            ttbr0_seen =  true;
+        }
+        if (strncmp(desc->name, ttbr1_reg_prefix->str, ttbr1_reg_prefix->len) == 0) {
             GByteArray *reg_buf = g_byte_array_new();
             int regsize = qemu_plugin_read_register(desc->handle, reg_buf);
             
             if (regsize > 0) {
                 for (int j = regsize-1; j >= 0; j--) {
-                    current_ttbr = (current_ttbr << 8) | reg_buf->data[j];
+                    cache->ttbr1 = (cache->ttbr1 << 8) | reg_buf->data[j];
                 }
             }
             g_byte_array_free(reg_buf, TRUE);
+            ttbr1_seen =  true;
+        }
+        if (ttbr0_seen && ttbr1_seen) {
             break;
         }
     }
     g_array_free(reg_list, TRUE);
-    return current_ttbr;
+    return;
 }
 
 static uint64_t read_gp_register(const char *reg_name)
@@ -168,24 +190,16 @@ static void vcpu_ttbr_exec(unsigned int cpu_index, void *udata)
     g_mutex_unlock(&cache->lock);
 }
 
-static uint64_t get_current_ttbr_cached(unsigned int cpu_index)
+static void update_cached_ttbr(VCPUCache *cache)
 {
-    VCPUCache *cache = get_vcpu_cache(cpu_index);
-    uint64_t ttbr;
-    
-    if (!cache) {
-        return read_current_ttbr();
-    }
+    g_assert_nonnull(cache);
     
     g_mutex_lock(&cache->lock);
     if (cache->ttbr_dirty) {
-        cache->ttbr = read_current_ttbr();
+        read_current_ttbr(cache);
         cache->ttbr_dirty = false;
     }
-    ttbr = cache->ttbr;
     g_mutex_unlock(&cache->lock);
-    
-    return ttbr;
 }
 
 static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
@@ -194,6 +208,7 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
     ProcessCallStack *stack;
     const char *sym = "<unknown>";
     uint64_t target_addr;
+    VCPUCache *cache;
 
     if (!info) {
         return;
@@ -203,12 +218,20 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
         return;
     }
 
-    uint64_t current_ttbr = get_current_ttbr_cached(cpu_index);
-    stack = get_process_stack(current_ttbr);
+    cache = get_vcpu_cache(cpu_index);
+
+    update_cached_ttbr(cache);
+
+    if ((info->insn_addr & 0xffffffff00000000) == 0xffffffff00000000) {
+        stack = get_process_stack(cache->ttbr1);
+    } else {
+        stack = get_process_stack(cache->ttbr0);
+    }
+
     if (!stack) {
         return;
     }
-    
+
     g_mutex_lock(&stack->lock);
     
     if (info->is_call) {
@@ -229,7 +252,7 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
     } else if (info->is_ret && stack->depth > 0) {
         stack->depth--;
     }
-    
+
     g_mutex_unlock(&stack->lock);
 }
 
