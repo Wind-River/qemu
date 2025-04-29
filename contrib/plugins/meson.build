@@ -1,6 +1,7 @@
 contrib_plugins = [
 'bbv.c',
 'cache.c',
+'callstack.c',
 'cflow.c',
 'devaccess.c',
 'drcov.c',
