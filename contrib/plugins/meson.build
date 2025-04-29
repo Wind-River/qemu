@@ -1,4 +1,4 @@
-contrib_plugins = ['bbv', 'cache', 'cflow', 'devaccess', 'drcov', 'execlog',
+contrib_plugins = ['bbv', 'cache', 'callstack', 'cflow', 'devaccess', 'drcov', 'execlog',
                    'hotblocks', 'hotpages', 'howvec', 'hwprofile', 'ips',
                    'stoptrigger']
 if host_os != 'windows'
