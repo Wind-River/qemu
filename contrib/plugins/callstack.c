@@ -25,6 +25,10 @@ typedef struct {
 typedef struct {
     CallStackEntry *entries;
     int depth;
+} ThreadCallStack;
+
+typedef struct {
+    GHashTable *thread_stacks;
     GMutex lock;
 } ProcessCallStack;
 
@@ -43,6 +47,7 @@ typedef struct {
     char reg_name[4];  // For storing register name from blr
     uint64_t target;   // For storing immediate from bl
     uint64_t insn_addr;  // Original instruction address for fallback
+    uint64_t sp;       // Stack pointer
 } InsnInfo;
 
 /* Global state */
@@ -70,6 +75,37 @@ static VCPUCache *get_vcpu_cache(unsigned int cpu_index)
     return cache;
 }
 
+static ThreadCallStack *get_thread_stack(ProcessCallStack *pstack, uint64_t sp)
+{
+    ThreadCallStack *tstack;
+
+    if (!pstack) {
+        return NULL;
+    }
+
+    if (!pstack->thread_stacks) {
+        return NULL;
+    }
+
+    g_mutex_lock(&pstack->lock);
+    tstack = g_hash_table_lookup(pstack->thread_stacks, GUINT_TO_POINTER(sp));
+    if (!tstack) {
+        tstack = g_new0(ThreadCallStack, 1);
+        if (tstack) {
+            tstack->entries = g_malloc0(sizeof(CallStackEntry) * MAX_CALLSTACK_DEPTH);
+            if (!tstack->entries) {
+                g_free(tstack);
+                tstack = NULL;
+            } else {
+                g_hash_table_insert(pstack->thread_stacks, GUINT_TO_POINTER(sp), tstack);
+            }
+        }
+    }
+    g_mutex_unlock(&pstack->lock);
+
+    return tstack;
+}
+
 static ProcessCallStack *get_process_stack(uint64_t ttbr)
 {
     ProcessCallStack *stack;
@@ -83,8 +119,8 @@ static ProcessCallStack *get_process_stack(uint64_t ttbr)
     if (!stack) {
         stack = g_new0(ProcessCallStack, 1);
         if (stack) {
-            stack->entries = g_malloc0(sizeof(CallStackEntry) * MAX_CALLSTACK_DEPTH);
-            if (!stack->entries) {
+            stack->thread_stacks = g_hash_table_new_full(NULL, g_direct_equal, NULL, g_free);
+            if (!stack->thread_stacks) {
                 g_free(stack);
                 stack = NULL;
             } else {
@@ -205,7 +241,8 @@ static void update_cached_ttbr(VCPUCache *cache)
 static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
 {
     InsnInfo *info = (InsnInfo *)udata;
-    ProcessCallStack *stack;
+    ProcessCallStack *pstack;
+    ThreadCallStack *tstack;
     const char *sym = "<unknown>";
     uint64_t target_addr;
     VCPUCache *cache;
@@ -223,19 +260,22 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
     update_cached_ttbr(cache);
 
     if ((info->insn_addr & 0xffffffff00000000) == 0xffffffff00000000) {
-        stack = get_process_stack(cache->ttbr1);
+        pstack = get_process_stack(cache->ttbr1);
+        tstack = get_thread_stack(pstack, info->sp);
+        
     } else {
-        stack = get_process_stack(cache->ttbr0);
+        pstack = get_process_stack(cache->ttbr0);
+        tstack = get_thread_stack(pstack, info->sp);
     }
 
-    if (!stack) {
+    if (!tstack) {
         return;
     }
 
-    g_mutex_lock(&stack->lock);
+    g_mutex_lock(&pstack->lock);
     
     if (info->is_call) {
-        if (stack->depth < MAX_CALLSTACK_DEPTH - 1) {
+        if (tstack->depth < MAX_CALLSTACK_DEPTH - 1) {
             if (info->reg_name[0]) { // This is a blr instruction
                 target_addr = read_gp_register(info->reg_name);
                 if (target_addr == 0) {
@@ -245,19 +285,21 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
                 target_addr = info->target;
             }
             
-            stack->entries[stack->depth].addr = target_addr;
-            stack->entries[stack->depth].symbol = sym;
-            stack->depth++;
+            tstack->entries[tstack->depth].addr = target_addr;
+            tstack->entries[tstack->depth].symbol = sym;
+            tstack->depth++;
         }
-    } else if (info->is_ret && stack->depth > 0) {
-        stack->depth--;
+    } else if (info->is_ret && tstack->depth > 0) {
+        tstack->depth--;
     }
 
-    g_mutex_unlock(&stack->lock);
+    g_mutex_unlock(&pstack->lock);
 }
 
 static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
 {
+    uint64_t sp;
+
     if (!tb) {
         return;
     }
@@ -274,6 +316,11 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
             continue;
         }
 
+        if (i == 0) {
+            /* assume sp is constant for the translation block */
+            sp = read_gp_register("sp");
+        }
+
         /* Register TTBR exec callback for MSR instructions that might modify TTBR */
         if (g_str_has_prefix(disas, "msr ") && strstr(disas, "ttbr")) {
             qemu_plugin_register_vcpu_insn_exec_cb(insn, vcpu_ttbr_exec,
@@ -285,6 +332,7 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
             g_str_has_prefix(disas, "ret")) {
             InsnInfo *info = g_new0(InsnInfo, 1);
             info->insn_addr = qemu_plugin_insn_vaddr(insn);
+            info->sp = sp;
             
             if (g_str_has_prefix(disas, "bl ")) {
                 info->is_call = true;
@@ -329,30 +377,40 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
     g_hash_table_iter_init(&iter, process_stacks);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
         uint64_t ttbr = (uint64_t)key;
-        ProcessCallStack *stack = (ProcessCallStack *)value;
+        ProcessCallStack *pstack = (ProcessCallStack *)value;
+        GHashTableIter tstack_iter;
+        gpointer tstack_key, tstack_value;
         
-        if (!stack) {
+        if (!pstack) {
             continue;
         }
+
+        g_mutex_lock(&pstack->lock);
         
-        g_mutex_lock(&stack->lock);
+        g_hash_table_iter_init(&tstack_iter, pstack->thread_stacks);
+
+        while (g_hash_table_iter_next(&tstack_iter, &tstack_key, &tstack_value)) {
+            uint64_t sp = (uint64_t)tstack_key;
+            ThreadCallStack *tstack = (ThreadCallStack *)tstack_value;
         
-        g_string_append_printf(report, "\nTTBR 0x%" PRIx64 " callstack depth: %d\n",
-                             ttbr, stack->depth);
-        
-        if (stack->depth > 0) {
-            g_string_append_printf(report, "Current callstack:\n");
-            for (int j = 0; j < stack->depth; j++) {
-                g_string_append_printf(report,
-                                  "  #%-2d 0x%" PRIx64 " in %s\n",
-                                  j, stack->entries[j].addr,
-                                  stack->entries[j].symbol);
+            g_string_append_printf(report, "\nTTBR 0x%" PRIx64 " SP 0x%" PRIx64 " callstack depth: %d\n",
+                                   ttbr, sp, tstack->depth);
+            
+            if (tstack->depth > 0) {
+                g_string_append_printf(report, "Current callstack:\n");
+                for (int j = 0; j < tstack->depth; j++) {
+                    g_string_append_printf(report,
+                                      "  #%-2d 0x%" PRIx64 " in %s\n",
+                                      j, tstack->entries[j].addr,
+                                      tstack->entries[j].symbol);
+                }
             }
+            g_free(tstack->entries);
         }
         
-        g_mutex_unlock(&stack->lock);
-        g_mutex_clear(&stack->lock);
-        g_free(stack->entries);
+        g_hash_table_destroy(pstack->thread_stacks);
+        g_mutex_unlock(&pstack->lock);
+        g_mutex_clear(&pstack->lock);
     }
     
     qemu_plugin_outs(report->str);
