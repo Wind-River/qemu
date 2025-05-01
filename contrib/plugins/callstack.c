@@ -298,8 +298,6 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
 
 static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
 {
-    uint64_t sp;
-
     if (!tb) {
         return;
     }
@@ -316,11 +314,6 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
             continue;
         }
 
-        if (i == 0) {
-            /* assume sp is constant for the translation block */
-            sp = read_gp_register("sp");
-        }
-
         /* Register TTBR exec callback for MSR instructions that might modify TTBR */
         if (g_str_has_prefix(disas, "msr ") && strstr(disas, "ttbr")) {
             qemu_plugin_register_vcpu_insn_exec_cb(insn, vcpu_ttbr_exec,
@@ -332,7 +325,7 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
             g_str_has_prefix(disas, "ret")) {
             InsnInfo *info = g_new0(InsnInfo, 1);
             info->insn_addr = qemu_plugin_insn_vaddr(insn);
-            info->sp = sp;
+            info->sp = read_gp_register("sp");
             
             if (g_str_has_prefix(disas, "bl ")) {
                 info->is_call = true;
