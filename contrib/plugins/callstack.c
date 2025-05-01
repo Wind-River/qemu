@@ -75,9 +75,12 @@ static VCPUCache *get_vcpu_cache(unsigned int cpu_index)
     return cache;
 }
 
+#define STACK_SIZE_MAX 0x1000
 static ThreadCallStack *get_thread_stack(ProcessCallStack *pstack, uint64_t sp)
 {
-    ThreadCallStack *tstack;
+    ThreadCallStack *tstack = NULL;
+    GHashTableIter iter;
+    gpointer key, value;
 
     if (!pstack) {
         return NULL;
@@ -88,7 +91,25 @@ static ThreadCallStack *get_thread_stack(ProcessCallStack *pstack, uint64_t sp)
     }
 
     g_mutex_lock(&pstack->lock);
-    tstack = g_hash_table_lookup(pstack->thread_stacks, GUINT_TO_POINTER(sp));
+
+    g_hash_table_iter_init(&iter, pstack->thread_stacks);
+
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+        uint64_t seen_sp = (uint64_t)key;
+        uint64_t sp_diff = 0;
+        ThreadCallStack *seen_tstack = (ThreadCallStack *)value;
+
+        if (sp < seen_sp) {
+            /* stack grows down */
+            sp_diff = seen_sp - sp;
+            if (sp_diff < STACK_SIZE_MAX) {
+                tstack = seen_tstack;
+                break;
+            }
+        }
+
+    }
+
     if (!tstack) {
         tstack = g_new0(ThreadCallStack, 1);
         if (tstack) {
@@ -97,10 +118,12 @@ static ThreadCallStack *get_thread_stack(ProcessCallStack *pstack, uint64_t sp)
                 g_free(tstack);
                 tstack = NULL;
             } else {
-                g_hash_table_insert(pstack->thread_stacks, GUINT_TO_POINTER(sp), tstack);
+                /* stack grows down, align up */
+                g_hash_table_insert(pstack->thread_stacks, GUINT_TO_POINTER(((sp + STACK_SIZE_MAX - 1) & ~(STACK_SIZE_MAX - 1))), tstack);
             }
         }
     }
+
     g_mutex_unlock(&pstack->lock);
 
     return tstack;
@@ -250,7 +273,7 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
     if (!info) {
         return;
     }
-    
+
     if (!info->is_call && !info->is_ret) {
         return;
     }
@@ -262,7 +285,7 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
     if ((info->insn_addr & 0xffffffff00000000) == 0xffffffff00000000) {
         pstack = get_process_stack(cache->ttbr1);
         tstack = get_thread_stack(pstack, info->sp);
-        
+
     } else {
         pstack = get_process_stack(cache->ttbr0);
         tstack = get_thread_stack(pstack, info->sp);
@@ -273,7 +296,7 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
     }
 
     g_mutex_lock(&pstack->lock);
-    
+
     if (info->is_call) {
         if (tstack->depth < MAX_CALLSTACK_DEPTH - 1) {
             if (info->reg_name[0]) { // This is a blr instruction
