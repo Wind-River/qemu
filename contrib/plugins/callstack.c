@@ -157,6 +157,19 @@ static ProcessCallStack *get_process_stack(uint64_t ttbr)
     return stack;
 }
 
+static void read_reg(qemu_plugin_reg_descriptor *desc, uint64_t *dest)
+{
+    GByteArray *reg_buf = g_byte_array_new();
+    int regsize = qemu_plugin_read_register(desc->handle, reg_buf);
+
+    if (regsize > 0) {
+        for (int j = regsize-1; j >= 0; j--) {
+            *dest = (*dest << 8) | reg_buf->data[j];
+        }
+    }
+    g_byte_array_free(reg_buf, TRUE);
+}
+
 static void read_current_ttbr(VCPUCache *cache)
 {
     g_autoptr(GString) ttbr0_reg_prefix = g_string_new("TTBR0_EL1");
@@ -177,27 +190,11 @@ static void read_current_ttbr(VCPUCache *cache)
         qemu_plugin_reg_descriptor *desc = &g_array_index(reg_list, 
             qemu_plugin_reg_descriptor, i);
         if (strncmp(desc->name, ttbr0_reg_prefix->str, ttbr0_reg_prefix->len) == 0) {
-            GByteArray *reg_buf = g_byte_array_new();
-            int regsize = qemu_plugin_read_register(desc->handle, reg_buf);
-
-            if (regsize > 0) {
-                for (int j = regsize-1; j >= 0; j--) {
-                    cache->ttbr0 = (cache->ttbr0 << 8) | reg_buf->data[j];
-                }
-            }
-            g_byte_array_free(reg_buf, TRUE);
+            read_reg(desc, &cache->ttbr0);
             ttbr0_seen =  true;
         }
         if (strncmp(desc->name, ttbr1_reg_prefix->str, ttbr1_reg_prefix->len) == 0) {
-            GByteArray *reg_buf = g_byte_array_new();
-            int regsize = qemu_plugin_read_register(desc->handle, reg_buf);
-            
-            if (regsize > 0) {
-                for (int j = regsize-1; j >= 0; j--) {
-                    cache->ttbr1 = (cache->ttbr1 << 8) | reg_buf->data[j];
-                }
-            }
-            g_byte_array_free(reg_buf, TRUE);
+            read_reg(desc, &cache->ttbr1);
             ttbr1_seen =  true;
         }
         if (ttbr0_seen && ttbr1_seen) {
@@ -221,15 +218,7 @@ static uint64_t read_gp_register(const char *reg_name)
         qemu_plugin_reg_descriptor *desc = &g_array_index(reg_list, 
             qemu_plugin_reg_descriptor, i);
         if (g_ascii_strcasecmp(desc->name, reg_name) == 0) {
-            GByteArray *reg_buf = g_byte_array_new();
-            int regsize = qemu_plugin_read_register(desc->handle, reg_buf);
-            
-            if (regsize > 0) {
-                for (int j = regsize-1; j >= 0; j--) {
-                    value = (value << 8) | reg_buf->data[j];
-                }
-            }
-            g_byte_array_free(reg_buf, TRUE);
+            read_reg(desc, &value);
             break;
         }
     }
