@@ -17,6 +17,8 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
 #define MAX_CALLSTACK_DEPTH 64
 #define MAX_SYMBOL_LENGTH 64
 
+static bool stack_heuristic = false;
+
 typedef struct {
     uint64_t addr;
     const char *symbol;
@@ -100,15 +102,26 @@ static ThreadCallStack *get_thread_stack(ProcessCallStack *pstack, uint64_t sp)
         uint64_t sp_diff = 0;
         ThreadCallStack *seen_tstack = (ThreadCallStack *)value;
 
-        if (sp < seen_sp) {
-            /* stack grows down */
-            sp_diff = seen_sp - sp;
-            if (sp_diff < STACK_SIZE_MAX) {
-                tstack = seen_tstack;
-                break;
+        if (stack_heuristic) {
+            /* if using stack segregation heuristic, find the nearest
+             * previously extrapolated stack base to group this func
+             * call/return with
+             */
+            if (sp < seen_sp) {
+                /* stack grows down */
+                sp_diff = seen_sp - sp;
+                if (sp_diff < STACK_SIZE_MAX) {
+                    tstack = seen_tstack;
+                    break;
+                }
             }
+        } else {
+            /* if not using stack segregation heuristic, there is only
+             * one tstack, so break at the first loop iteration
+             */
+            tstack = seen_tstack;
+            break;
         }
-
     }
 
     if (!tstack) {
@@ -461,6 +474,17 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
     if (!strstr(info->target_name, "aarch64")) {
         fprintf(stderr, "This plugin only supports aarch64 targets\n");
         return -1;
+    }
+
+    for (int i = 0; i < argc; i++) {
+        char *opt = argv[i];
+        g_auto(GStrv) tokens = g_strsplit(opt, "=", 2);
+        if (g_strcmp0(tokens[0], "stack_heuristic") == 0) {
+            if (!qemu_plugin_bool_parse(tokens[0], tokens[1], &stack_heuristic)) {
+                fprintf(stderr, "boolean arg parsing failed: %s\n", opt);
+                return -1;
+            }
+        }
     }
 
     vcpu_caches = g_hash_table_new_full(NULL, g_direct_equal, NULL, g_free);
