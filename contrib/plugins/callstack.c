@@ -36,6 +36,7 @@ typedef struct {
 typedef struct {
     uint64_t ttbr0;         /* Cached TTBR value */
     uint64_t ttbr1;         /* Cached TTBR value */
+    uint64_t tcr;
     bool ttbr_dirty;       /* Flag indicating if cache needs refresh */
     GMutex lock;          /* Lock for this cache entry */
 } VCPUCache;
@@ -172,15 +173,20 @@ static void read_reg(qemu_plugin_reg_descriptor *desc, uint64_t *dest)
 
 static void read_current_ttbr(VCPUCache *cache)
 {
+    // Read both TTBR0 and TTBR1
     g_autoptr(GString) ttbr0_reg_prefix = g_string_new("TTBR0_EL1");
     g_autoptr(GString) ttbr1_reg_prefix = g_string_new("TTBR1_EL1");
+    // Also read TCR_EL1 to determine which addresses to associate with TTBR0 or TTBR1
+    g_autoptr(GString) tcr_reg_prefix = g_string_new("TCR_EL1");
     GArray *reg_list = qemu_plugin_get_registers();
     bool ttbr0_seen = false;
     bool ttbr1_seen = false;
+    bool tcr_seen = false;
 
-    /* reset cached ttbr values */
+    /* reset cached values */
     cache->ttbr0 = 0;
     cache->ttbr1 = 0;
+    cache->tcr = 0;
 
     if (!reg_list) {
         return;
@@ -197,7 +203,11 @@ static void read_current_ttbr(VCPUCache *cache)
             read_reg(desc, &cache->ttbr1);
             ttbr1_seen =  true;
         }
-        if (ttbr0_seen && ttbr1_seen) {
+        if (strncmp(desc->name, tcr_reg_prefix->str, tcr_reg_prefix->len) == 0) {
+            read_reg(desc, &cache->tcr);
+            tcr_seen = true;
+        }
+        if (ttbr0_seen && ttbr1_seen && tcr_seen) {
             break;
         }
     }
@@ -257,6 +267,8 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
     ThreadCallStack *tstack;
     const char *sym = "<unknown>";
     uint64_t target_addr;
+    uint64_t tcr_t0sz;
+    uint64_t mask;
     VCPUCache *cache;
 
     if (!info) {
@@ -271,12 +283,15 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
 
     update_cached_ttbr(cache);
 
-    if ((info->insn_addr & 0xffffffff00000000) == 0xffffffff00000000) {
-        pstack = get_process_stack(cache->ttbr1);
-        tstack = get_thread_stack(pstack, info->sp);
+    // get number of bits used for VA space addressed through TTBR0
+    tcr_t0sz = cache->tcr & 0x3F;
+    mask = ~((1ULL << (64 - tcr_t0sz)) - 1);
 
-    } else {
+    if ((info->insn_addr & mask) == 0) {
         pstack = get_process_stack(cache->ttbr0);
+        tstack = get_thread_stack(pstack, info->sp);
+    } else {
+        pstack = get_process_stack(cache->ttbr1);
         tstack = get_thread_stack(pstack, info->sp);
     }
 
