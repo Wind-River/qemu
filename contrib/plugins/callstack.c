@@ -11,13 +11,13 @@
 #include <inttypes.h>
 #include <assert.h>
 #include <glib.h>
+#include <fcntl.h>
+#include "elf.h" 
 
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
 
 #define MAX_CALLSTACK_DEPTH 64
 #define MAX_SYMBOL_LENGTH 64
-
-static bool stack_heuristic = false;
 
 typedef struct {
     uint64_t addr;
@@ -54,10 +54,15 @@ typedef struct {
 } InsnInfo;
 
 /* Global state */
+static const char *file_name;
+static bool stack_heuristic = false;
+
 static GHashTable *process_stacks;
 static GMutex stacks_lock;
 static GHashTable *vcpu_caches;  /* Map of CPU index to VCPUCache */
 static GMutex vcpu_caches_lock;
+
+static GHashTable *kernel_addr_to_sym;
 
 static VCPUCache *get_vcpu_cache(unsigned int cpu_index) 
 {
@@ -278,7 +283,7 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
     InsnInfo *info = (InsnInfo *)udata;
     ProcessCallStack *pstack;
     ThreadCallStack *tstack;
-    const char *sym = "<unknown>";
+    const char *sym;
     uint64_t target_addr;
     uint64_t tcr_t0sz;
     uint64_t mask;
@@ -323,6 +328,16 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
                 }
             } else { // This is a bl instruction
                 target_addr = info->target;
+            }
+
+            /* Look up symbol in kernel symbol table */
+            sym = "<unknown>";
+            if (kernel_addr_to_sym) {
+                const char *kernel_sym = g_hash_table_lookup(kernel_addr_to_sym, 
+                                                          GUINT_TO_POINTER(target_addr));
+                if (kernel_sym) {
+                    sym = kernel_sym;
+                }
             }
             
             tstack->entries[tstack->depth].addr = target_addr;
@@ -394,6 +409,169 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
 
         g_free(disas);
     }
+}
+
+/* Parse ELF file and populate kernel symbol table */
+static bool parse_kernel_symbols(void) 
+{
+    int fd;
+    Elf64_Ehdr ehdr;
+    Elf64_Shdr *shdr = NULL;
+    char *strtab = NULL;
+    Elf64_Sym *syms = NULL;
+    int sym_idx = 0, str_idx = 0;
+    int i, nsyms;
+    bool success = false;
+
+    if (!file_name) {
+        fprintf(stderr, "No kernel ELF file specified\n");
+        return false;
+    }
+
+    kernel_addr_to_sym = g_hash_table_new_full(g_direct_hash, g_direct_equal,
+                                              NULL, g_free);
+    if (!kernel_addr_to_sym) {
+        fprintf(stderr, "Failed to create symbol hash table\n");
+        return false;
+    }
+
+    fd = open(file_name, O_RDONLY);
+    if (fd < 0) {
+        fprintf(stderr, "Failed to open file %s: %s\n", file_name, strerror(errno));
+        goto cleanup;
+    }
+
+    /* Read ELF header */
+    if (read(fd, &ehdr, sizeof(ehdr)) != sizeof(ehdr)) {
+        fprintf(stderr, "Failed to read ELF header: %s\n", strerror(errno));
+        goto cleanup;
+    }
+
+    /* Check ELF magic */
+    if (ehdr.e_ident[EI_MAG0] != ELFMAG0 || ehdr.e_ident[EI_MAG1] != ELFMAG1 ||
+        ehdr.e_ident[EI_MAG2] != ELFMAG2 || ehdr.e_ident[EI_MAG3] != ELFMAG3) {
+        fprintf(stderr, "Not a valid ELF file (wrong magic)\n");
+        goto cleanup;
+    }
+
+    /* Verify 64-bit ELF */
+    if (ehdr.e_ident[EI_CLASS] != ELFCLASS64) {
+        fprintf(stderr, "Not a 64-bit ELF file\n");
+        goto cleanup;
+    }
+
+    /* Read section headers */
+    shdr = g_malloc0(sizeof(Elf64_Shdr) * ehdr.e_shnum);
+    if (!shdr) {
+        fprintf(stderr, "Failed to allocate section headers\n");
+        goto cleanup;
+    }
+
+    if (lseek(fd, ehdr.e_shoff, SEEK_SET) < 0) {
+        fprintf(stderr, "Failed to seek to section headers: %s\n", strerror(errno));
+        goto cleanup;
+    }
+
+    ssize_t bytes_read = read(fd, shdr, sizeof(Elf64_Shdr) * ehdr.e_shnum);
+    if (bytes_read != sizeof(Elf64_Shdr) * ehdr.e_shnum) {
+        fprintf(stderr, "Failed to read section headers (read %zd bytes, expected %zu): %s\n",
+                bytes_read, sizeof(Elf64_Shdr) * ehdr.e_shnum, strerror(errno));
+        goto cleanup;
+    }
+
+    /* Find symbol table and string table sections */
+    for (i = 0; i < ehdr.e_shnum; i++) {
+        if (shdr[i].sh_type == SHT_SYMTAB) {
+            sym_idx = i;
+            str_idx = shdr[i].sh_link;
+            break;
+        }
+    }
+
+    if (!sym_idx) {
+        fprintf(stderr, "No symbol table found in ELF file\n");
+        goto cleanup;
+    }
+
+    if (str_idx >= ehdr.e_shnum) {
+        fprintf(stderr, "Invalid string table index %d\n", str_idx);
+        goto cleanup;
+    }
+
+    /* Read string table */
+    strtab = g_malloc0(shdr[str_idx].sh_size);
+    if (!strtab) {
+        fprintf(stderr, "Failed to allocate string table\n");
+        goto cleanup;
+    }
+
+    if (lseek(fd, shdr[str_idx].sh_offset, SEEK_SET) < 0) {
+        fprintf(stderr, "Failed to seek to string table: %s\n", strerror(errno));
+        goto cleanup;
+    }
+
+    bytes_read = read(fd, strtab, shdr[str_idx].sh_size);
+    if (bytes_read != shdr[str_idx].sh_size) {
+        fprintf(stderr, "Failed to read string table (read %zd bytes, expected %zu): %s\n",
+                bytes_read, (size_t)shdr[str_idx].sh_size, strerror(errno));
+        goto cleanup;
+    }
+
+    /* Read symbol table */
+    syms = g_malloc0(shdr[sym_idx].sh_size);
+    if (!syms) {
+        fprintf(stderr, "Failed to allocate symbol table\n");
+        goto cleanup;
+    }
+
+    if (lseek(fd, shdr[sym_idx].sh_offset, SEEK_SET) < 0) {
+        fprintf(stderr, "Failed to seek to symbol table: %s\n", strerror(errno));
+        goto cleanup;
+    }
+
+    bytes_read = read(fd, syms, shdr[sym_idx].sh_size);
+    if (bytes_read != shdr[sym_idx].sh_size) {
+        fprintf(stderr, "Failed to read symbol table (read %zd bytes, expected %zu): %s\n",
+                bytes_read, (size_t)shdr[sym_idx].sh_size, strerror(errno));
+        goto cleanup;
+    }
+
+    nsyms = shdr[sym_idx].sh_size / sizeof(Elf64_Sym);
+    fprintf(stderr, "Found %d symbols\n", nsyms);
+
+    /* Populate hash table with function symbols */
+    int func_count = 0;
+    for (i = 0; i < nsyms; i++) {
+        if (ELF64_ST_TYPE(syms[i].st_info) == STT_FUNC && syms[i].st_name) {
+            char *name = g_strdup(strtab + syms[i].st_name);
+            if (name) {
+                g_hash_table_insert(kernel_addr_to_sym,
+                                  GUINT_TO_POINTER(syms[i].st_value),
+                                  name);
+                func_count++;
+            }
+        }
+    }
+    fprintf(stderr, "Added %d function symbols to hash table\n", func_count);
+
+    success = true;
+
+cleanup:
+    if (fd >= 0) {
+        close(fd);
+    }
+    g_free(shdr);
+    g_free(strtab); 
+    g_free(syms);
+
+    if (!success) {
+        if (kernel_addr_to_sym) {
+            g_hash_table_destroy(kernel_addr_to_sym);
+            kernel_addr_to_sym = NULL;
+        }
+    }
+
+    return success;
 }
 
 static void plugin_exit(qemu_plugin_id_t id, void *p)
@@ -479,12 +657,21 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
     for (int i = 0; i < argc; i++) {
         char *opt = argv[i];
         g_auto(GStrv) tokens = g_strsplit(opt, "=", 2);
+        if (g_strcmp0(tokens[0], "kernel_elf") == 0) {
+            file_name = g_strdup(tokens[1]);
+        }
         if (g_strcmp0(tokens[0], "stack_heuristic") == 0) {
             if (!qemu_plugin_bool_parse(tokens[0], tokens[1], &stack_heuristic)) {
                 fprintf(stderr, "boolean arg parsing failed: %s\n", opt);
                 return -1;
             }
         }
+    }
+
+    /* Initialize symbol table if kernel ELF file was provided */
+    if (file_name && !parse_kernel_symbols()) {
+        fprintf(stderr, "Failed to parse kernel symbols from %s\n", file_name);
+        return -1;
     }
 
     vcpu_caches = g_hash_table_new_full(NULL, g_direct_equal, NULL, g_free);
