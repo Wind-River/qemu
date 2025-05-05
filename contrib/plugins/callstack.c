@@ -32,7 +32,7 @@ typedef struct {
 typedef struct {
     GHashTable *thread_stacks;
     GMutex lock;
-} ProcessCallStack;
+} ProcessCallStacks;
 
 /* Per-vCPU TTBR cache */
 typedef struct {
@@ -84,23 +84,23 @@ static VCPUCache *get_vcpu_cache(unsigned int cpu_index)
 }
 
 #define STACK_SIZE_MAX 0x1000
-static ThreadCallStack *get_thread_stack(ProcessCallStack *pstack, uint64_t sp)
+static ThreadCallStack *get_thread_stack(ProcessCallStacks *pstacks, uint64_t sp)
 {
     ThreadCallStack *tstack = NULL;
     GHashTableIter iter;
     gpointer key, value;
 
-    if (!pstack) {
+    if (!pstacks) {
         return NULL;
     }
 
-    if (!pstack->thread_stacks) {
+    if (!pstacks->thread_stacks) {
         return NULL;
     }
 
-    g_mutex_lock(&pstack->lock);
+    g_mutex_lock(&pstacks->lock);
 
-    g_hash_table_iter_init(&iter, pstack->thread_stacks);
+    g_hash_table_iter_init(&iter, pstacks->thread_stacks);
 
     while (g_hash_table_iter_next(&iter, &key, &value)) {
         uint64_t seen_sp = (uint64_t)key;
@@ -138,19 +138,19 @@ static ThreadCallStack *get_thread_stack(ProcessCallStack *pstack, uint64_t sp)
                 tstack = NULL;
             } else {
                 /* stack grows down, align up */
-                g_hash_table_insert(pstack->thread_stacks, GUINT_TO_POINTER(((sp + STACK_SIZE_MAX - 1) & ~(STACK_SIZE_MAX - 1))), tstack);
+                g_hash_table_insert(pstacks->thread_stacks, GUINT_TO_POINTER(((sp + STACK_SIZE_MAX - 1) & ~(STACK_SIZE_MAX - 1))), tstack);
             }
         }
     }
 
-    g_mutex_unlock(&pstack->lock);
+    g_mutex_unlock(&pstacks->lock);
 
     return tstack;
 }
 
-static ProcessCallStack *get_process_stack(uint64_t ttbr)
+static ProcessCallStacks *get_process(uint64_t ttbr)
 {
-    ProcessCallStack *stack;
+    ProcessCallStacks *stack;
     
     if (!process_stacks) {
         return NULL;
@@ -159,7 +159,7 @@ static ProcessCallStack *get_process_stack(uint64_t ttbr)
     g_mutex_lock(&stacks_lock);
     stack = g_hash_table_lookup(process_stacks, GUINT_TO_POINTER(ttbr));
     if (!stack) {
-        stack = g_new0(ProcessCallStack, 1);
+        stack = g_new0(ProcessCallStacks, 1);
         if (stack) {
             stack->thread_stacks = g_hash_table_new_full(NULL, g_direct_equal, NULL, g_free);
             if (!stack->thread_stacks) {
@@ -281,7 +281,7 @@ static void update_cached_ttbr(VCPUCache *cache)
 static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
 {
     InsnInfo *info = (InsnInfo *)udata;
-    ProcessCallStack *pstack;
+    ProcessCallStacks *pstacks;
     ThreadCallStack *tstack;
     const char *sym;
     uint64_t target_addr;
@@ -305,19 +305,15 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
     tcr_t0sz = cache->tcr & 0x3F;
     mask = ~((1ULL << (64 - tcr_t0sz)) - 1);
 
-    if ((info->insn_addr & mask) == 0) {
-        pstack = get_process_stack(cache->ttbr0);
-        tstack = get_thread_stack(pstack, info->sp);
-    } else {
-        pstack = get_process_stack(cache->ttbr1);
-        tstack = get_thread_stack(pstack, info->sp);
-    }
+    pstacks = ((info->insn_addr & mask) == 0) ? get_process(cache->ttbr0) : get_process(cache->ttbr1);
+    
+    tstack = get_thread_stack(pstacks, info->sp);
 
     if (!tstack) {
         return;
     }
 
-    g_mutex_lock(&pstack->lock);
+    g_mutex_lock(&pstacks->lock);
 
     if (info->is_call) {
         if (tstack->depth < MAX_CALLSTACK_DEPTH - 1) {
@@ -348,7 +344,7 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
         tstack->depth--;
     }
 
-    g_mutex_unlock(&pstack->lock);
+    g_mutex_unlock(&pstacks->lock);
 }
 
 static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
@@ -588,17 +584,17 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
     g_hash_table_iter_init(&iter, process_stacks);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
         uint64_t ttbr = (uint64_t)key;
-        ProcessCallStack *pstack = (ProcessCallStack *)value;
+        ProcessCallStacks *pstacks = (ProcessCallStacks *)value;
         GHashTableIter tstack_iter;
         gpointer tstack_key, tstack_value;
         
-        if (!pstack) {
+        if (!pstacks) {
             continue;
         }
 
-        g_mutex_lock(&pstack->lock);
+        g_mutex_lock(&pstacks->lock);
         
-        g_hash_table_iter_init(&tstack_iter, pstack->thread_stacks);
+        g_hash_table_iter_init(&tstack_iter, pstacks->thread_stacks);
 
         while (g_hash_table_iter_next(&tstack_iter, &tstack_key, &tstack_value)) {
             uint64_t sp = (uint64_t)tstack_key;
@@ -619,9 +615,9 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
             g_free(tstack->entries);
         }
         
-        g_hash_table_destroy(pstack->thread_stacks);
-        g_mutex_unlock(&pstack->lock);
-        g_mutex_clear(&pstack->lock);
+        g_hash_table_destroy(pstacks->thread_stacks);
+        g_mutex_unlock(&pstacks->lock);
+        g_mutex_clear(&pstacks->lock);
     }
     
     qemu_plugin_outs(report->str);
