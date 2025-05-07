@@ -51,11 +51,13 @@ typedef struct {
     uint64_t target;   // For storing immediate from bl
     uint64_t insn_addr;  // Original instruction address for fallback
     uint64_t sp;       // Stack pointer
+    uint64_t x18;
 } InsnInfo;
 
 /* Global state */
 static const char *file_name;
 static bool stack_heuristic = false;
+static bool stack_vxworks = false;
 static bool split_ttbr0_ttbr1 = false;
 
 static GHashTable *process_stacks;
@@ -121,6 +123,10 @@ static ThreadCallStack *get_thread_stack(ProcessCallStacks *pstacks, uint64_t ti
                     break;
                 }
             }
+        } else if (stack_vxworks) {
+            if (tid == seen_tid) {
+                tstack = seen_tstack;
+            }
         } else {
             /* if not using stack segregation heuristic, there is only
              * one tstack, so break at the first loop iteration
@@ -141,6 +147,8 @@ static ThreadCallStack *get_thread_stack(ProcessCallStacks *pstacks, uint64_t ti
                 if (stack_heuristic) {
                     /* stack grows down, align up */
                     g_hash_table_insert(pstacks->thread_stacks, GUINT_TO_POINTER(((tid + STACK_SIZE_MAX - 1) & ~(STACK_SIZE_MAX - 1))), tstack);
+                } else if (stack_vxworks) {
+                    g_hash_table_insert(pstacks->thread_stacks, GUINT_TO_POINTER(tid), tstack);
                 } else {
                     g_hash_table_insert(pstacks->thread_stacks, GUINT_TO_POINTER(0), tstack);
                 }
@@ -293,6 +301,9 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
     uint64_t tcr_t0sz;
     uint64_t mask;
     VCPUCache *cache;
+    uint64_t tcb;
+    GByteArray *taskIdCurrent = g_byte_array_new();
+    int i;
 
     if (!info) {
         return;
@@ -315,7 +326,21 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
         pstacks = get_process(cache->ttbr0);
     }
     
-    tstack = get_thread_stack(pstacks, info->sp);
+    qemu_plugin_read_memory_vaddr(info->x18, taskIdCurrent, 8);
+
+    if (taskIdCurrent->len == 8) {
+        tcb = 0;
+        for (i = 0; i < 8; i++) {
+            tcb |= ((uint64_t)taskIdCurrent->data[i] << (8 * i));
+        }
+    }
+
+    if (stack_vxworks) {
+        tstack = get_thread_stack(pstacks, tcb);
+    } else {
+        tstack = get_thread_stack(pstacks, info->sp);
+    }
+
 
     if (!tstack) {
         return;
@@ -382,6 +407,7 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
             InsnInfo *info = g_new0(InsnInfo, 1);
             info->insn_addr = qemu_plugin_insn_vaddr(insn);
             info->sp = read_gp_register("sp");
+            info->x18 = read_gp_register("x18");
             
             if (g_str_has_prefix(disas, "bl ")) {
                 info->is_call = true;
@@ -605,8 +631,13 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
             uint64_t sp = (uint64_t)tstack_key;
             ThreadCallStack *tstack = (ThreadCallStack *)tstack_value;
         
-            g_string_append_printf(report, "\nTTBR 0x%" PRIx64 " SP 0x%" PRIx64 " callstack depth: %d\n",
-                                   ttbr, sp, tstack->depth);
+            if (stack_vxworks) {
+                g_string_append_printf(report, "\nTTBR 0x%" PRIx64 " TCB 0x%" PRIx64 " callstack depth: %d\n",
+                                       ttbr, sp, tstack->depth);
+            } else {
+                g_string_append_printf(report, "\nTTBR 0x%" PRIx64 " SP 0x%" PRIx64 " callstack depth: %d\n",
+                                       ttbr, sp, tstack->depth);
+            }
             
             if (tstack->depth > 0) {
                 g_string_append_printf(report, "Current callstack:\n");
@@ -663,6 +694,12 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
         }
         if (g_strcmp0(tokens[0], "stack_heuristic") == 0) {
             if (!qemu_plugin_bool_parse(tokens[0], tokens[1], &stack_heuristic)) {
+                fprintf(stderr, "boolean arg parsing failed: %s\n", opt);
+                return -1;
+            }
+        }
+        if (g_strcmp0(tokens[0], "stack_vxworks") == 0) {
+            if (!qemu_plugin_bool_parse(tokens[0], tokens[1], &stack_vxworks)) {
                 fprintf(stderr, "boolean arg parsing failed: %s\n", opt);
                 return -1;
             }
