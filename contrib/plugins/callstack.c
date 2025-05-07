@@ -56,6 +56,7 @@ typedef struct {
 /* Global state */
 static const char *file_name;
 static bool stack_heuristic = false;
+static bool split_ttbr0_ttbr1 = false;
 
 static GHashTable *process_stacks;
 static GMutex stacks_lock;
@@ -301,11 +302,14 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
 
     update_cached_ttbr(cache);
 
-    // get number of bits used for VA space addressed through TTBR0
-    tcr_t0sz = cache->tcr & 0x3F;
-    mask = ~((1ULL << (64 - tcr_t0sz)) - 1);
-
-    pstacks = ((info->insn_addr & mask) == 0) ? get_process(cache->ttbr0) : get_process(cache->ttbr1);
+    if (split_ttbr0_ttbr1) {
+        // get number of bits used for VA space addressed through TTBR0
+        tcr_t0sz = cache->tcr & 0x3F;
+        mask = ~((1ULL << (64 - tcr_t0sz)) - 1);
+        pstacks = ((info->insn_addr & mask) == 0) ? get_process(cache->ttbr0) : get_process(cache->ttbr1);
+    } else {
+        pstacks = get_process(cache->ttbr0);
+    }
     
     tstack = get_thread_stack(pstacks, info->sp);
 
@@ -655,6 +659,12 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
         }
         if (g_strcmp0(tokens[0], "stack_heuristic") == 0) {
             if (!qemu_plugin_bool_parse(tokens[0], tokens[1], &stack_heuristic)) {
+                fprintf(stderr, "boolean arg parsing failed: %s\n", opt);
+                return -1;
+            }
+        }
+        if (g_strcmp0(tokens[0], "split_ttbr0_ttbr1") == 0) {
+            if (!qemu_plugin_bool_parse(tokens[0], tokens[1], &split_ttbr0_ttbr1)) {
                 fprintf(stderr, "boolean arg parsing failed: %s\n", opt);
                 return -1;
             }
