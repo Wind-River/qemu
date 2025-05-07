@@ -319,9 +319,6 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
         if (tstack->depth < MAX_CALLSTACK_DEPTH - 1) {
             if (info->reg_name[0]) { // This is a blr instruction
                 target_addr = read_gp_register(info->reg_name);
-                if (target_addr == 0) {
-                    target_addr = info->insn_addr; // fallback
-                }
             } else { // This is a bl instruction
                 target_addr = info->target;
             }
