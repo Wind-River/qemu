@@ -85,7 +85,7 @@ static VCPUCache *get_vcpu_cache(unsigned int cpu_index)
 }
 
 #define STACK_SIZE_MAX 0x1000
-static ThreadCallStack *get_thread_stack(ProcessCallStacks *pstacks, uint64_t sp)
+static ThreadCallStack *get_thread_stack(ProcessCallStacks *pstacks, uint64_t tid)
 {
     ThreadCallStack *tstack = NULL;
     GHashTableIter iter;
@@ -104,8 +104,8 @@ static ThreadCallStack *get_thread_stack(ProcessCallStacks *pstacks, uint64_t sp
     g_hash_table_iter_init(&iter, pstacks->thread_stacks);
 
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        uint64_t seen_sp = (uint64_t)key;
-        uint64_t sp_diff = 0;
+        uint64_t seen_tid = (uint64_t)key;
+        uint64_t distance;
         ThreadCallStack *seen_tstack = (ThreadCallStack *)value;
 
         if (stack_heuristic) {
@@ -113,10 +113,10 @@ static ThreadCallStack *get_thread_stack(ProcessCallStacks *pstacks, uint64_t sp
              * previously extrapolated stack base to group this func
              * call/return with
              */
-            if (sp < seen_sp) {
+            if (tid < seen_tid) {
                 /* stack grows down */
-                sp_diff = seen_sp - sp;
-                if (sp_diff < STACK_SIZE_MAX) {
+                distance = seen_tid - tid;
+                if (distance < STACK_SIZE_MAX) {
                     tstack = seen_tstack;
                     break;
                 }
@@ -138,8 +138,12 @@ static ThreadCallStack *get_thread_stack(ProcessCallStacks *pstacks, uint64_t sp
                 g_free(tstack);
                 tstack = NULL;
             } else {
-                /* stack grows down, align up */
-                g_hash_table_insert(pstacks->thread_stacks, GUINT_TO_POINTER(((sp + STACK_SIZE_MAX - 1) & ~(STACK_SIZE_MAX - 1))), tstack);
+                if (stack_heuristic) {
+                    /* stack grows down, align up */
+                    g_hash_table_insert(pstacks->thread_stacks, GUINT_TO_POINTER(((tid + STACK_SIZE_MAX - 1) & ~(STACK_SIZE_MAX - 1))), tstack);
+                } else {
+                    g_hash_table_insert(pstacks->thread_stacks, GUINT_TO_POINTER(0), tstack);
+                }
             }
         }
     }
