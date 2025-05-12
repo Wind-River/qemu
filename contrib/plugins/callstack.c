@@ -34,7 +34,7 @@ typedef struct {
     GMutex lock;
 } ProcessCallStacks;
 
-/* Per-vCPU TTBR cache */
+/* cached per-vcpu state */
 typedef struct {
     uint64_t ttbr0;         /* Cached TTBR value */
     uint64_t ttbr1;         /* Cached TTBR value */
@@ -62,7 +62,7 @@ static bool split_ttbr0_ttbr1 = false;
 
 static GHashTable *process_stacks;
 static GMutex stacks_lock;
-static GHashTable *vcpu_caches;  /* Map of CPU index to VCPUCache */
+static GArray *vcpu_caches;
 static GMutex vcpu_caches_lock;
 
 static GHashTable *kernel_addr_to_sym;
@@ -72,15 +72,7 @@ static VCPUCache *get_vcpu_cache(unsigned int cpu_index)
     VCPUCache *cache;
     
     g_mutex_lock(&vcpu_caches_lock);
-    cache = g_hash_table_lookup(vcpu_caches, GUINT_TO_POINTER(cpu_index));
-    if (!cache) {
-        cache = g_new0(VCPUCache, 1);
-        if (cache) {
-            g_mutex_init(&cache->lock);
-            cache->ttbr_dirty = true; /* Force initial read */
-            g_hash_table_insert(vcpu_caches, GUINT_TO_POINTER(cpu_index), cache);
-        }
-    }
+    cache = &g_array_index(vcpu_caches, VCPUCache, cpu_index);
     g_mutex_unlock(&vcpu_caches_lock);
     
     return cache;
@@ -606,6 +598,7 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
     g_autoptr(GString) report = g_string_new("Callstack Report By TTBR:\n");
     GHashTableIter iter;
     gpointer key, value;
+    int i;
     
     if (!process_stacks || !report) {
         return;
@@ -641,11 +634,11 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
             
             if (tstack->depth > 0) {
                 g_string_append_printf(report, "Current callstack:\n");
-                for (int j = 0; j < tstack->depth; j++) {
+                for (i = 0; i < tstack->depth; i++) {
                     g_string_append_printf(report,
                                       "  #%-2d 0x%" PRIx64 " in %s\n",
-                                      j, tstack->entries[j].addr,
-                                      tstack->entries[j].symbol);
+                                      i, tstack->entries[i].addr,
+                                      tstack->entries[i].symbol);
                 }
             }
             g_free(tstack->entries);
@@ -660,14 +653,11 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
     
     /* Clean up vcpu caches */
     g_mutex_lock(&vcpu_caches_lock);
-    g_hash_table_iter_init(&iter, vcpu_caches);
-    while (g_hash_table_iter_next(&iter, &key, &value)) {
-        VCPUCache *cache = (VCPUCache *)value;
-        if (cache) {
-            g_mutex_clear(&cache->lock);
-        }
+    for (i = 0; i < vcpu_caches->len; i++) {
+        VCPUCache *c = &g_array_index(vcpu_caches, VCPUCache, i);
+        g_mutex_clear(&c->lock);
     }
-    g_hash_table_destroy(vcpu_caches);
+    g_array_free(vcpu_caches, true);
     g_mutex_unlock(&vcpu_caches_lock);
     g_mutex_clear(&vcpu_caches_lock);
     
@@ -718,15 +708,21 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
         return -1;
     }
 
-    vcpu_caches = g_hash_table_new_full(NULL, g_direct_equal, NULL, g_free);
+    vcpu_caches = g_array_sized_new(true, true, sizeof(VCPUCache), info->system.max_vcpus);
     if (!vcpu_caches) {
         return -1;
+    }
+    for (int i = 0; i < vcpu_caches->len; i++) {
+        VCPUCache *c = &g_array_index(vcpu_caches, VCPUCache, i);
+        g_mutex_init(&c->lock);
+        /* mark dirty to force initial read */
+        c->ttbr_dirty = true;
     }
     g_mutex_init(&vcpu_caches_lock);
 
     process_stacks = g_hash_table_new_full(NULL, g_direct_equal, NULL, g_free);
     if (!process_stacks) {
-        g_hash_table_destroy(vcpu_caches);
+        g_array_free(vcpu_caches, true);
         g_mutex_clear(&vcpu_caches_lock);
         return -1;
     }
