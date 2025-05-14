@@ -40,6 +40,7 @@ typedef struct {
     uint64_t ttbr1;         /* Cached TTBR value */
     uint64_t tcr;
     bool ttbr_dirty;       /* Flag indicating if cache needs refresh */
+    uint64_t taskIdCurrent;
     GMutex lock;          /* Lock for this cache entry */
 } VCPUCache;
 
@@ -51,7 +52,6 @@ typedef struct {
     uint64_t target;   // For storing immediate from bl
     uint64_t insn_addr;  // Original instruction address for fallback
     uint64_t sp;       // Stack pointer
-    uint64_t x18;
 } InsnInfo;
 
 /* Global state */
@@ -66,6 +66,7 @@ static GArray *vcpu_caches;
 static GMutex vcpu_caches_lock;
 
 static GHashTable *kernel_addr_to_sym;
+uint64_t vxKernelVarsAddr = (uint64_t)-1;
 
 static VCPUCache *get_vcpu_cache(unsigned int cpu_index) 
 {
@@ -293,9 +294,6 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
     uint64_t tcr_t0sz;
     uint64_t mask;
     VCPUCache *cache;
-    uint64_t tcb;
-    GByteArray *taskIdCurrent = g_byte_array_new();
-    int i;
 
     if (!info) {
         return;
@@ -318,17 +316,8 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
         pstacks = get_process(cache->ttbr0);
     }
     
-    qemu_plugin_read_memory_vaddr(info->x18, taskIdCurrent, 8);
-
-    if (taskIdCurrent->len == 8) {
-        tcb = 0;
-        for (i = 0; i < 8; i++) {
-            tcb |= ((uint64_t)taskIdCurrent->data[i] << (8 * i));
-        }
-    }
-
     if (stack_vxworks) {
-        tstack = get_thread_stack(pstacks, tcb);
+        tstack = get_thread_stack(pstacks, cache->taskIdCurrent);
     } else {
         tstack = get_thread_stack(pstacks, info->sp);
     }
@@ -369,6 +358,33 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
     g_mutex_unlock(&pstacks->lock);
 }
 
+static void windvars_update_cb(unsigned int cpu_index, qemu_plugin_meminfo_t info,
+                               uint64_t vaddr, void *udata)
+{
+    VCPUCache *cache;
+
+    cache = get_vcpu_cache(cpu_index);
+
+    /*
+     * vxKernelVars[] is an array of WIND_VARS structs indexed by CPU ID.
+     * Each entry of vxKernelVars is 256 bytes. This is calculated based
+     * on the 152 byte size of _windVars (as of vxWorks 25.03) aligned to
+     * 128 bytes.
+     */
+#define SIZE_WIND_VARS 256
+    if (vaddr == (vxKernelVarsAddr + (cpu_index * SIZE_WIND_VARS)) &&
+        qemu_plugin_mem_is_store(info)) {
+        qemu_plugin_mem_value val;
+
+        g_mutex_lock(&cache->lock);
+        val = qemu_plugin_mem_get_value(info);
+        cache->taskIdCurrent = val.data.u64;
+        g_mutex_unlock(&cache->lock);
+    }
+
+    return;
+}
+
 static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
 {
     if (!tb) {
@@ -399,7 +415,6 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
             InsnInfo *info = g_new0(InsnInfo, 1);
             info->insn_addr = qemu_plugin_insn_vaddr(insn);
             info->sp = read_gp_register("sp");
-            info->x18 = read_gp_register("x18");
             
             if (g_str_has_prefix(disas, "bl ")) {
                 info->is_call = true;
@@ -425,6 +440,11 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
                                                  QEMU_PLUGIN_CB_R_REGS,
                                                  info);
         }
+
+        /* check for updates to taskIdCurrent */
+        qemu_plugin_register_vcpu_mem_cb(insn, windvars_update_cb,
+                                         QEMU_PLUGIN_CB_NO_REGS,
+                                         QEMU_PLUGIN_MEM_W, NULL);
 
         g_free(disas);
     }
@@ -558,16 +578,23 @@ static bool parse_kernel_symbols(void)
     nsyms = shdr[sym_idx].sh_size / sizeof(Elf64_Sym);
     fprintf(stderr, "Found %d symbols\n", nsyms);
 
-    /* Populate hash table with function symbols */
     int func_count = 0;
     for (i = 0; i < nsyms; i++) {
-        if (ELF64_ST_TYPE(syms[i].st_info) == STT_FUNC && syms[i].st_name) {
-            char *name = g_strdup(strtab + syms[i].st_name);
-            if (name) {
-                g_hash_table_insert(kernel_addr_to_sym,
-                                  GUINT_TO_POINTER(syms[i].st_value),
-                                  name);
+        if (syms[i].st_name) {
+            /* add func symbols to kernel_addr_to_sym map */
+            if (ELF64_ST_TYPE(syms[i].st_info) == STT_FUNC) {
+                char *name = g_strdup(strtab + syms[i].st_name);
+                if (name) {
+                    g_hash_table_insert(kernel_addr_to_sym,
+                                        GUINT_TO_POINTER(syms[i].st_value),
+                                        name);
+                }
                 func_count++;
+            }
+            /* get address of vxKernelVars from symbol table */
+            if (ELF64_ST_TYPE(syms[i].st_info) == STT_OBJECT &&
+                g_strcmp0(strtab + syms[i].st_name, "vxKernelVars") == 0) {
+                vxKernelVarsAddr = syms[i].st_value;
             }
         }
     }
@@ -706,6 +733,11 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
     if (file_name && !parse_kernel_symbols()) {
         fprintf(stderr, "Failed to parse kernel symbols from %s\n", file_name);
         return -1;
+    }
+
+    /* check if vxKernelVars is successfully parsed if using stack_vxworks */
+    if (stack_vxworks && vxKernelVarsAddr == (uint64_t)-1) {
+        fprintf(stderr, "Failed to parse vxKernelVars from %s\n", file_name);
     }
 
     vcpu_caches = g_array_sized_new(true, true, sizeof(VCPUCache), info->system.max_vcpus);
