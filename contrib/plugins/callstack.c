@@ -182,6 +182,62 @@ static ProcessCallStacks *get_process(uint64_t ttbr)
     return stack;
 }
 
+static void print_stacks(void)
+{
+    g_autoptr(GString) report = g_string_new("Callstack Report:\n");
+    GHashTableIter iter;
+    gpointer key, value;
+    int i;
+
+    if (!process_stacks || !report) {
+        return;
+    }
+
+    g_mutex_lock(&stacks_lock);
+    g_hash_table_iter_init(&iter, process_stacks);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+        uint64_t ttbr = (uint64_t)key;
+        ProcessCallStacks *pstacks = (ProcessCallStacks *)value;
+        GHashTableIter tstack_iter;
+        gpointer tstack_key, tstack_value;
+
+        if (!pstacks) {
+            continue;
+        }
+
+        g_mutex_lock(&pstacks->lock);
+
+        g_hash_table_iter_init(&tstack_iter, pstacks->thread_stacks);
+
+        while (g_hash_table_iter_next(&tstack_iter, &tstack_key, &tstack_value)) {
+            uint64_t tid = (uint64_t)tstack_key;
+            ThreadCallStack *tstack = (ThreadCallStack *)tstack_value;
+
+            if (stack_vxworks) {
+                g_string_append_printf(report, "\nTTBR 0x%" PRIx64 " TCB 0x%" PRIx64 " callstack depth: %d\n",
+                                       ttbr, tid, tstack->depth);
+            } else {
+                g_string_append_printf(report, "\nTTBR 0x%" PRIx64 " SP 0x%" PRIx64 " callstack depth: %d\n",
+                                       ttbr, tid, tstack->depth);
+            }
+
+            if (tstack->depth > 0) {
+                g_string_append_printf(report, "Current callstack:\n");
+                for (i = 0; i < tstack->depth; i++) {
+                    g_string_append_printf(report,
+                                      "  #%-2d 0x%" PRIx64 " in %s\n",
+                                      i, tstack->entries[i].addr,
+                                      tstack->entries[i].symbol);
+                }
+            }
+        }
+        g_mutex_unlock(&pstacks->lock);
+    }
+    g_mutex_unlock(&stacks_lock);
+
+    qemu_plugin_outs(report->str);
+}
+
 static void read_reg(qemu_plugin_reg_descriptor *desc, uint64_t *dest)
 {
     GByteArray *reg_buf = g_byte_array_new();
@@ -623,19 +679,20 @@ cleanup:
 
 static void plugin_exit(qemu_plugin_id_t id, void *p)
 {
-    g_autoptr(GString) report = g_string_new("Callstack Report By TTBR:\n");
     GHashTableIter iter;
     gpointer key, value;
     int i;
     
-    if (!process_stacks || !report) {
+    if (!process_stacks) {
         return;
     }
+
+    print_stacks();
     
+    /* Clean up Process and thread stacks */
     g_mutex_lock(&stacks_lock);
     g_hash_table_iter_init(&iter, process_stacks);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        uint64_t ttbr = (uint64_t)key;
         ProcessCallStacks *pstacks = (ProcessCallStacks *)value;
         GHashTableIter tstack_iter;
         gpointer tstack_key, tstack_value;
@@ -649,26 +706,7 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
         g_hash_table_iter_init(&tstack_iter, pstacks->thread_stacks);
 
         while (g_hash_table_iter_next(&tstack_iter, &tstack_key, &tstack_value)) {
-            uint64_t sp = (uint64_t)tstack_key;
             ThreadCallStack *tstack = (ThreadCallStack *)tstack_value;
-        
-            if (stack_vxworks) {
-                g_string_append_printf(report, "\nTTBR 0x%" PRIx64 " TCB 0x%" PRIx64 " callstack depth: %d\n",
-                                       ttbr, sp, tstack->depth);
-            } else {
-                g_string_append_printf(report, "\nTTBR 0x%" PRIx64 " SP 0x%" PRIx64 " callstack depth: %d\n",
-                                       ttbr, sp, tstack->depth);
-            }
-            
-            if (tstack->depth > 0) {
-                g_string_append_printf(report, "Current callstack:\n");
-                for (i = 0; i < tstack->depth; i++) {
-                    g_string_append_printf(report,
-                                      "  #%-2d 0x%" PRIx64 " in %s\n",
-                                      i, tstack->entries[i].addr,
-                                      tstack->entries[i].symbol);
-                }
-            }
             g_free(tstack->entries);
         }
         
@@ -676,8 +714,6 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
         g_mutex_unlock(&pstacks->lock);
         g_mutex_clear(&pstacks->lock);
     }
-    
-    qemu_plugin_outs(report->str);
     
     /* Clean up vcpu caches */
     g_mutex_lock(&vcpu_caches_lock);
