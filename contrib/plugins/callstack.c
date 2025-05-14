@@ -414,7 +414,8 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
             g_str_has_prefix(disas, "ret")) {
             InsnInfo *info = g_new0(InsnInfo, 1);
             info->insn_addr = qemu_plugin_insn_vaddr(insn);
-            info->sp = read_gp_register("sp");
+            /* reading registers is costly, so only read SP if needed */
+            info->sp = stack_heuristic ? read_gp_register("sp") : 0;
             
             if (g_str_has_prefix(disas, "bl ")) {
                 info->is_call = true;
