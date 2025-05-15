@@ -65,6 +65,7 @@ static GArray *vcpu_caches;
 static GMutex vcpu_caches_lock;
 
 static GHashTable *kernel_addr_to_sym;
+static GHashTable *user_addr_to_sym;
 uint64_t vxKernelVarsAddr = (uint64_t)-1;
 
 static VCPUCache *get_vcpu_cache(unsigned int cpu_index) 
@@ -362,21 +363,21 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
 
     update_cached_ttbr(cache);
 
+    // get number of bits used for VA space addressed through TTBR0
+    tcr_t0sz = cache->tcr & 0x3F;
+    mask = ~((1ULL << (64 - tcr_t0sz)) - 1);
+
     if (split_ttbr0_ttbr1) {
-        // get number of bits used for VA space addressed through TTBR0
-        tcr_t0sz = cache->tcr & 0x3F;
-        mask = ~((1ULL << (64 - tcr_t0sz)) - 1);
         pstacks = ((info->insn_addr & mask) == 0) ? get_process(cache->ttbr0) : get_process(cache->ttbr1);
     } else {
         pstacks = get_process(cache->ttbr0);
     }
-    
+
     if (stack_vxworks) {
         tstack = get_thread_stack(pstacks, cache->taskIdCurrent);
     } else {
         tstack = get_thread_stack(pstacks, info->sp);
     }
-
 
     if (!tstack) {
         return;
@@ -394,11 +395,19 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
 
             /* Look up symbol in kernel symbol table */
             sym = "<unknown>";
-            if (kernel_addr_to_sym) {
+            if (kernel_addr_to_sym &&
+                (info->insn_addr & mask) != 0) {
                 const char *kernel_sym = g_hash_table_lookup(kernel_addr_to_sym, 
                                                              GUINT_TO_POINTER(target_addr));
                 if (kernel_sym) {
                     sym = kernel_sym;
+                }
+            } else if (user_addr_to_sym &&
+                       (info->insn_addr & mask) == 0) {
+                const char *app_sym = g_hash_table_lookup(user_addr_to_sym,
+                                                          GUINT_TO_POINTER(target_addr));
+                if (app_sym) {
+                    sym = app_sym;
                 }
             }
             
@@ -702,9 +711,9 @@ static bool parse_vxKernelVars(const char *vxworks_elf,
     return found;
 }
 
-/* Parse ELF file and populate kernel symbol table */
-static bool parse_kernel_symbols(const char *vxworks_elf,
-                                 GHashTable **sym_map)
+/* Parse ELF file and populate symbol map */
+static bool parse_func_symbols(const char *vxworks_elf,
+                               GHashTable **sym_map)
 {
     GHashTable *syms = g_hash_table_new_full(g_direct_hash,
                                              g_direct_equal,
@@ -778,6 +787,7 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
                                          int argc, char **argv)
 {
     static const char *kernel_elf;
+    static const char *user_elf;
 
     /* Only support aarch64 targets */
     if (!strstr(info->target_name, "aarch64")) {
@@ -790,6 +800,9 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
         g_auto(GStrv) tokens = g_strsplit(opt, "=", 2);
         if (g_strcmp0(tokens[0], "kernel_elf") == 0) {
             kernel_elf = g_strdup(tokens[1]);
+        }
+        if (g_strcmp0(tokens[0], "user_elf") == 0) {
+            user_elf = g_strdup(tokens[1]);
         }
         if (g_strcmp0(tokens[0], "stack_heuristic") == 0) {
             if (!qemu_plugin_bool_parse(tokens[0], tokens[1], &stack_heuristic)) {
@@ -812,7 +825,7 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
     }
 
     /* Initialize symbol table if kernel ELF file was provided */
-    if (kernel_elf && !parse_kernel_symbols(kernel_elf, &kernel_addr_to_sym)) {
+    if (kernel_elf && !parse_func_symbols(kernel_elf, &kernel_addr_to_sym)) {
         fprintf(stderr, "Failed to parse kernel symbols from %s\n", kernel_elf);
         return -1;
     }
@@ -820,6 +833,12 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
     /* check if vxKernelVars is successfully parsed if using stack_vxworks */
     if (stack_vxworks && !parse_vxKernelVars(kernel_elf, &vxKernelVarsAddr)) {
         fprintf(stderr, "Failed to parse vxKernelVars from %s\n", kernel_elf);
+        return -1;
+    }
+
+    /* Parse symbols from application elf */
+    if (user_elf && !parse_func_symbols(user_elf, &user_addr_to_sym)) {
+        fprintf(stderr, "Failed to parse symbols from %s\n", user_elf);
         return -1;
     }
 
