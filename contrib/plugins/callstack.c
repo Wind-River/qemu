@@ -63,6 +63,7 @@ static GHashTable *process_stacks;
 static GMutex stacks_lock;
 static GArray *vcpu_caches;
 static GMutex vcpu_caches_lock;
+static GArray *triggers;
 
 static GHashTable *kernel_addr_to_sym;
 static GHashTable *user_addr_to_sym;
@@ -430,6 +431,40 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
     g_mutex_unlock(&pstacks->lock);
 }
 
+static void vcpu_dump_callstack_cb(unsigned int cpu_index, void *udata)
+{
+    VCPUCache *cache;
+    ProcessCallStacks *pstacks;
+    ThreadCallStack *tstack;
+    g_autoptr(GString) report = g_string_new(NULL);
+
+    if (!stack_vxworks) {
+        /* assume stack_vxworks for now */
+        return;
+    }
+
+    cache = get_vcpu_cache(cpu_index);
+
+    update_cached_ttbr(cache);
+
+    pstacks = get_process(cache->ttbr0);
+
+    tstack = get_thread_stack(pstacks, cache->taskIdCurrent);
+
+    if (!tstack) {
+        return;
+    }
+
+    g_mutex_lock(&pstacks->lock);
+
+    g_string_append_printf(report, "Callstack at PC 0x%" PRIx64 "\n", (uint64_t)udata);
+    print_stack(tstack, cache->ttbr0, cache->taskIdCurrent, report);
+
+    g_mutex_unlock(&pstacks->lock);
+
+    qemu_plugin_outs(report->str);
+}
+
 static void windvars_update_cb(unsigned int cpu_index, qemu_plugin_meminfo_t info,
                                uint64_t vaddr, void *udata)
 {
@@ -514,6 +549,15 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
                                                  info);
         }
 
+        for (int j = 0; j < triggers->len; j++) {
+            uint64_t pc = qemu_plugin_insn_vaddr(insn);
+            if (pc == g_array_index(triggers, uint64_t, j)) {
+                qemu_plugin_register_vcpu_insn_exec_cb(insn, vcpu_dump_callstack_cb,
+                                                       QEMU_PLUGIN_CB_R_REGS,
+                                                       (void *)pc);
+            }
+        }
+
         /* check for updates to taskIdCurrent */
         qemu_plugin_register_vcpu_mem_cb(insn, windvars_update_cb,
                                          QEMU_PLUGIN_CB_NO_REGS,
@@ -521,6 +565,17 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
 
         g_free(disas);
     }
+}
+
+static void add_pc_match(char *addr)
+{
+    uint64_t pc = g_ascii_strtoull(addr, NULL, 16);
+
+    if (!triggers) {
+        triggers = g_array_new(false, true, sizeof(uint64_t));
+    }
+
+    g_array_append_val(triggers, pc);
 }
 
 static bool parse_elf(const char *elf_file,
@@ -829,6 +884,9 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
                 fprintf(stderr, "boolean arg parsing failed: %s\n", opt);
                 return -1;
             }
+        }
+        if (g_strcmp0(tokens[0], "pc") == 0) {
+            add_pc_match(tokens[1]);
         }
     }
 
