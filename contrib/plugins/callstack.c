@@ -21,6 +21,7 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
 
 typedef struct {
     uint64_t addr;
+    uint64_t ret_addr;
     const char *symbol;
 } CallStackEntry;
 
@@ -421,11 +422,18 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
             }
             
             tstack->entries[tstack->depth].addr = target_addr;
+            tstack->entries[tstack->depth].ret_addr = info->insn_addr + 4;
             tstack->entries[tstack->depth].symbol = sym;
             tstack->depth++;
         }
     } else if (info->is_ret && tstack->depth > 0) {
-        tstack->depth--;
+        uint64_t lr = read_gp_register("x30");
+        for (int i = tstack->depth - 1; i >= 0; i--) {
+            if (lr == tstack->entries[i].ret_addr) {
+                tstack->depth = i;
+                break;
+            }
+        }
     }
 
     g_mutex_unlock(&pstacks->lock);
