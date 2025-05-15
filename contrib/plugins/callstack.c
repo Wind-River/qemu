@@ -182,12 +182,36 @@ static ProcessCallStacks *get_process(uint64_t ttbr)
     return stack;
 }
 
+static void print_stack(ThreadCallStack *tstack,
+                        uint64_t ttbr,
+                        uint64_t tid,
+                        GString *report)
+{
+    int i;
+
+    if (stack_vxworks) {
+        g_string_append_printf(report, "\nTTBR 0x%" PRIx64 " TCB 0x%" PRIx64 " callstack depth: %d\n",
+                               ttbr, tid, tstack->depth);
+    } else {
+        g_string_append_printf(report, "\nTTBR 0x%" PRIx64 " SP 0x%" PRIx64 " callstack depth: %d\n",
+                               ttbr, tid, tstack->depth);
+    }
+
+    if (tstack->depth > 0) {
+        for (i = 0; i < tstack->depth; i++) {
+            g_string_append_printf(report,
+                              "  #%-2d 0x%" PRIx64 " in %s\n",
+                              i, tstack->entries[i].addr,
+                              tstack->entries[i].symbol);
+        }
+    }
+}
+
 static void print_stacks(void)
 {
     g_autoptr(GString) report = g_string_new("Callstack Report:\n");
     GHashTableIter iter;
     gpointer key, value;
-    int i;
 
     if (!process_stacks || !report) {
         return;
@@ -213,23 +237,7 @@ static void print_stacks(void)
             uint64_t tid = (uint64_t)tstack_key;
             ThreadCallStack *tstack = (ThreadCallStack *)tstack_value;
 
-            if (stack_vxworks) {
-                g_string_append_printf(report, "\nTTBR 0x%" PRIx64 " TCB 0x%" PRIx64 " callstack depth: %d\n",
-                                       ttbr, tid, tstack->depth);
-            } else {
-                g_string_append_printf(report, "\nTTBR 0x%" PRIx64 " SP 0x%" PRIx64 " callstack depth: %d\n",
-                                       ttbr, tid, tstack->depth);
-            }
-
-            if (tstack->depth > 0) {
-                g_string_append_printf(report, "Current callstack:\n");
-                for (i = 0; i < tstack->depth; i++) {
-                    g_string_append_printf(report,
-                                      "  #%-2d 0x%" PRIx64 " in %s\n",
-                                      i, tstack->entries[i].addr,
-                                      tstack->entries[i].symbol);
-                }
-            }
+            print_stack(tstack, ttbr, tid, report);
         }
         g_mutex_unlock(&pstacks->lock);
     }
