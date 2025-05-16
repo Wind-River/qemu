@@ -563,12 +563,14 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
                                                QEMU_PLUGIN_CB_R_REGS,
                                                info);
 
-        for (int j = 0; j < triggers->len; j++) {
-            uint64_t pc = qemu_plugin_insn_vaddr(insn);
-            if (pc == g_array_index(triggers, uint64_t, j)) {
-                qemu_plugin_register_vcpu_insn_exec_cb(insn, vcpu_dump_callstack_cb,
-                                                       QEMU_PLUGIN_CB_R_REGS,
-                                                       (void *)pc);
+        if (triggers) {
+            for (int j = 0; j < triggers->len; j++) {
+                uint64_t pc = qemu_plugin_insn_vaddr(insn);
+                if (pc == g_array_index(triggers, uint64_t, j)) {
+                    qemu_plugin_register_vcpu_insn_exec_cb(insn, vcpu_dump_callstack_cb,
+                                                           QEMU_PLUGIN_CB_R_REGS,
+                                                           (void *)pc);
+                }
             }
         }
 
