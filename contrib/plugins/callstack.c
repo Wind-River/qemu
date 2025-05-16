@@ -63,7 +63,7 @@ static bool split_ttbr0_ttbr1 = false;
 
 static GHashTable *process_stacks;
 static GMutex stacks_lock;
-static GArray *vcpu_caches;
+static GPtrArray *vcpu_caches;
 static GMutex vcpu_caches_lock;
 static GArray *triggers;
 
@@ -76,7 +76,7 @@ static VCPUCache *get_vcpu_cache(unsigned int cpu_index)
     VCPUCache *cache;
     
     g_mutex_lock(&vcpu_caches_lock);
-    cache = &g_array_index(vcpu_caches, VCPUCache, cpu_index);
+    cache = g_ptr_array_index(vcpu_caches, cpu_index);
     g_mutex_unlock(&vcpu_caches_lock);
     
     return cache;
@@ -849,10 +849,11 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
     /* Clean up vcpu caches */
     g_mutex_lock(&vcpu_caches_lock);
     for (i = 0; i < vcpu_caches->len; i++) {
-        VCPUCache *c = &g_array_index(vcpu_caches, VCPUCache, i);
+        VCPUCache *c = g_ptr_array_index(vcpu_caches, i);
         g_mutex_clear(&c->lock);
+        g_free(c);
     }
-    g_array_free(vcpu_caches, true);
+    g_ptr_array_free(vcpu_caches, true);
     g_mutex_unlock(&vcpu_caches_lock);
     g_mutex_clear(&vcpu_caches_lock);
     
@@ -924,21 +925,37 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
         return -1;
     }
 
-    vcpu_caches = g_array_sized_new(true, true, sizeof(VCPUCache), info->system.max_vcpus);
+    vcpu_caches = g_ptr_array_new();
     if (!vcpu_caches) {
         return -1;
     }
-    for (int i = 0; i < vcpu_caches->len; i++) {
-        VCPUCache *c = &g_array_index(vcpu_caches, VCPUCache, i);
-        g_mutex_init(&c->lock);
+
+    for (int i = 0; i < info->system.max_vcpus; i++) {
+        VCPUCache *cache = g_new0(VCPUCache, 1);
+        if (!cache) {
+            for (int j = 0; j < i; j++) {
+                VCPUCache *c = g_ptr_array_index(vcpu_caches, j);
+                g_mutex_clear(&c->lock);
+                g_free(c);
+            }
+            g_ptr_array_free(vcpu_caches, true);
+            return -1;
+        }
         /* mark dirty to force initial read */
-        c->ttbr_dirty = true;
+        cache->ttbr_dirty = true;
+        g_mutex_init(&cache->lock);
+        g_ptr_array_add(vcpu_caches, cache);
     }
     g_mutex_init(&vcpu_caches_lock);
 
     process_stacks = g_hash_table_new_full(NULL, g_direct_equal, NULL, g_free);
     if (!process_stacks) {
-        g_array_free(vcpu_caches, true);
+        for (int i = 0; i < vcpu_caches->len; i++) {
+            VCPUCache *c = g_ptr_array_index(vcpu_caches, i);
+            g_mutex_clear(&c->lock);
+            g_free(c);
+        }
+        g_ptr_array_free(vcpu_caches, true);
         g_mutex_clear(&vcpu_caches_lock);
         return -1;
     }
