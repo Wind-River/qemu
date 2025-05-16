@@ -193,10 +193,10 @@ static void print_stack(ThreadCallStack *tstack,
     int i;
 
     if (stack_vxworks) {
-        g_string_append_printf(report, "\nTTBR 0x%" PRIx64 " TCB 0x%" PRIx64 " callstack depth: %d\n",
+        g_string_append_printf(report, "TTBR 0x%" PRIx64 " TCB 0x%" PRIx64 " callstack depth: %d\n",
                                ttbr, tid, tstack->depth);
     } else {
-        g_string_append_printf(report, "\nTTBR 0x%" PRIx64 " SP 0x%" PRIx64 " callstack depth: %d\n",
+        g_string_append_printf(report, "TTBR 0x%" PRIx64 " SP 0x%" PRIx64 " callstack depth: %d\n",
                                ttbr, tid, tstack->depth);
     }
 
@@ -208,6 +208,8 @@ static void print_stack(ThreadCallStack *tstack,
                               tstack->entries[i].symbol);
         }
     }
+
+    g_string_append_printf(report, "\n");
 }
 
 static void print_stacks(void)
@@ -473,7 +475,7 @@ static void vcpu_dump_callstack_cb(unsigned int cpu_index, void *udata)
 
     g_mutex_lock(&pstacks->lock);
 
-    g_string_append_printf(report, "Callstack at PC 0x%" PRIx64 "\n", (uint64_t)udata);
+    g_string_append_printf(report, "PC 0x%" PRIx64 "\n", (uint64_t)udata);
     print_stack(tstack, cache->ttbr0, cache->taskIdCurrent, report);
 
     g_mutex_unlock(&pstacks->lock);
