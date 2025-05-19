@@ -1,10 +1,21 @@
 /*
- * Callstack Plugin for AArch64
+ * callstack.c, Callstack Plugin for AArch64
  *
- * Copyright (C) 2025 
+ * Copyright (c) 2025 Wind River Systems, Inc.
  *
- * License: GNU GPL, version 2 or later.
- *   See the COPYING file in the top-level directory.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ *
  */
 #include "qemu/osdep.h"
 #include "qemu/plugin.h"
