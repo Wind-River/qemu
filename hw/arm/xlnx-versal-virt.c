@@ -65,7 +65,7 @@ static void fdt_create(VersalVirt *s)
 {
     MachineClass *mc = MACHINE_GET_CLASS(s);
     VersalVirtClass *vvc = XLNX_VERSAL_VIRT_BASE_MACHINE_GET_CLASS(s);
-    const char versal_compat[] = "xlnx,versal\0amd-versal-virt\0xlnx-versal-virt";
+    const char versal_compat[] = "xlnx,versal\0amd,versal\0amd-versal-virt\0xlnx-versal-virt";
     const char versal2_compat[] = "amd-versal2-virt";
 
     s->fdt = create_device_tree(&s->fdt_size);
