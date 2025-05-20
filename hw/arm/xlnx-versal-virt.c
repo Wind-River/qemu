@@ -64,6 +64,9 @@ struct VersalVirt {
 static void fdt_create(VersalVirt *s)
 {
     MachineClass *mc = MACHINE_GET_CLASS(s);
+    static const char * const versal_compat[2] = {
+        "xlnx,versal", "amd,versal"
+    };
     int i;
 
     s->fdt = create_device_tree(&s->fdt_size);
@@ -92,7 +95,8 @@ static void fdt_create(VersalVirt *s)
     qemu_fdt_setprop_cell(s->fdt, "/", "#size-cells", 0x2);
     qemu_fdt_setprop_cell(s->fdt, "/", "#address-cells", 0x2);
     qemu_fdt_setprop_string(s->fdt, "/", "model", mc->desc);
-    qemu_fdt_setprop_string(s->fdt, "/", "compatible", "xlnx,versal");
+    qemu_fdt_setprop_string_array(s->fdt, "/", "compatible",
+        (char **)&versal_compat, ARRAY_SIZE(versal_compat));
 }
 
 static void fdt_add_clk_node(VersalVirt *s, const char *name,
