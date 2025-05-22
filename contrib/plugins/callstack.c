@@ -1100,16 +1100,14 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
         if (g_strcmp0(tokens[0], "user_elf") == 0) {
             user_elf = g_strdup(tokens[1]);
         }
-        if (g_strcmp0(tokens[0], "stack_heuristic") == 0) {
-            if (!qemu_plugin_bool_parse(tokens[0], tokens[1], &stack_heuristic)) {
-                fprintf(stderr, "boolean arg parsing failed: %s\n", opt);
-                return -1;
-            }
-        }
-        if (g_strcmp0(tokens[0], "stack_vxworks") == 0) {
-            if (!qemu_plugin_bool_parse(tokens[0], tokens[1], &stack_vxworks)) {
-                fprintf(stderr, "boolean arg parsing failed: %s\n", opt);
-                return -1;
+        if (g_strcmp0(tokens[0], "stack") == 0) {
+            if (g_strcmp0(tokens[1], "vxworks") == 0) {
+                if (!kernel_elf) {
+                    fprintf(stderr, "kernel_elf must be specified when using stack=vxworks\n");
+                }
+                stack_vxworks = true;
+            } else if (g_strcmp0(tokens[1], "heuristic") == 0) {
+                stack_heuristic = true;
             }
         }
         if (g_strcmp0(tokens[0], "split_ttbr0_ttbr1") == 0) {
@@ -1119,6 +1117,9 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
             }
         }
         if (g_strcmp0(tokens[0], "pc") == 0) {
+            if (!stack_vxworks) {
+                fprintf(stderr, "pc trigger only supported with stack=vxworks\n");
+            }
             add_pc_match(tokens[1]);
         }
     }
