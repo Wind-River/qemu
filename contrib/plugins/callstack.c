@@ -30,41 +30,47 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
 #define MAX_CALLSTACK_DEPTH 64
 #define MAX_SYMBOL_LENGTH 64
 
+/* size of struct WIND_VARS in VxWorks for OS introspection */
+#define SIZE_WIND_VARS 256
+/* Stack size approximation used for stack segregation heuristic when
+ * not using OS introspection */
+#define STACK_SIZE_MAX 0x1000
+
 typedef struct {
-    uint64_t addr;
-    uint64_t ret_addr;
-    const char *symbol;
+    uint64_t addr;      /* function address of stack frame */
+    uint64_t ret_addr;  /* return address of stack frame */
+    const char *symbol; /* function symbol corresponding to addr */
 } CallStackEntry;
 
 typedef struct {
-    CallStackEntry *entries;
-    int depth;
+    CallStackEntry *entries;    /* stack frames */
+    int depth;                  /* depth of call stack */
 } ThreadCallStack;
 
 typedef struct {
-    GHashTable *thread_stacks;
-    GMutex lock;
+    GHashTable *thread_stacks;  /* map of thread ID to ThreadCallStack */
+    GMutex lock;                /* synchronize access to this structure */
 } ProcessCallStacks;
 
 /* cached per-vcpu state */
 typedef struct {
     uint64_t ttbr0;         /* Cached TTBR value */
     uint64_t ttbr1;         /* Cached TTBR value */
-    uint64_t tcr;
-    bool ttbr_dirty;       /* Flag indicating if cache needs refresh */
-    uint64_t taskIdCurrent;
+    uint64_t tcr;           /* Cached translation control register value */
+    bool ttbr_dirty;        /* Flag indicating if cache needs refresh */
+    uint64_t taskIdCurrent; /* current task ID */
     bool prev_insn_ret;     /* indicates the last executed instruction was a return */
-    GMutex lock;          /* Lock for this cache entry */
+    GMutex lock;            /* Lock for this cache entry */
 } VCPUCache;
 
 /* Struct to hold parsed instruction info */
 typedef struct {
-    bool is_call;
-    bool is_ret;
-    char reg_name[4];  // For storing register name from blr
-    uint64_t target;   // For storing immediate from bl
-    uint64_t insn_addr;  // Original instruction address for fallback
-    uint64_t sp;       // Stack pointer
+    bool is_call;       /* instruction is a function call */
+    bool is_ret;        /* instruction is a return */
+    char reg_name[4];   /* BLR branch target register name */
+    uint64_t target;    /* BL branch target (immediate) */
+    uint64_t insn_addr; /* PC */
+    uint64_t sp;        /* SP */
 } InsnInfo;
 
 /* Global state */
@@ -82,6 +88,13 @@ static GHashTable *kernel_addr_to_sym;
 static GHashTable *user_addr_to_sym;
 uint64_t vxKernelVarsAddr = (uint64_t)-1;
 
+/**
+ * get_vcpu_cache - get the cached vCPU state
+ *
+ * @cpu_index: the CPU ID
+ *
+ * Returns: VCPUCache identified by cpu_index
+ */
 static VCPUCache *get_vcpu_cache(unsigned int cpu_index) 
 {
     VCPUCache *cache;
@@ -93,7 +106,16 @@ static VCPUCache *get_vcpu_cache(unsigned int cpu_index)
     return cache;
 }
 
-#define STACK_SIZE_MAX 0x1000
+/**
+ * get_thread_stack - get the callstack associated with a thread
+ *
+ * @pstacks: ProcessCallStacks structure of the process that the task/thread
+ *           is a member of.
+ * @tid: the task or thread ID
+ *
+ * Returns: the ThreadCallStack identified by tid in the process associated
+ *          with pstacks
+ */
 static ThreadCallStack *get_thread_stack(ProcessCallStacks *pstacks, uint64_t tid)
 {
     ThreadCallStack *tstack = NULL;
@@ -168,6 +190,14 @@ static ThreadCallStack *get_thread_stack(ProcessCallStacks *pstacks, uint64_t ti
     return tstack;
 }
 
+/**
+ * get_process - get the set of callstacks associated with a given TTBR
+ *
+ * @ttbr: the translation table base address of the process of interest
+ *
+ * Returns: ProcessCallStacks struct containing hash table of thread ID
+ *          to callstack mappings associated with the given process.
+ */
 static ProcessCallStacks *get_process(uint64_t ttbr)
 {
     ProcessCallStacks *stack;
@@ -196,6 +226,14 @@ static ProcessCallStacks *get_process(uint64_t ttbr)
     return stack;
 }
 
+/**
+ * print_stack - print a single callstack
+ *
+ * @tstack: thread callstack to print
+ * @ttbr: TTBR corresponding to the tstack
+ * @tid: Task or Thread ID corresponding to tstack
+ * @report: GString to append output to
+ */
 static void print_stack(ThreadCallStack *tstack,
                         uint64_t ttbr,
                         uint64_t tid,
@@ -223,6 +261,11 @@ static void print_stack(ThreadCallStack *tstack,
     g_string_append_printf(report, "\n");
 }
 
+/**
+ * print_stacks - output all currently tracked callstacks
+ *
+ * Output all callstacks to qemu plugin log using qemu_plugin_outs
+ */
 static void print_stacks(void)
 {
     g_autoptr(GString) report = g_string_new("Callstack Report:\n");
@@ -262,6 +305,14 @@ static void print_stacks(void)
     qemu_plugin_outs(report->str);
 }
 
+/**
+ * read_reg - register reading helper function
+ *
+ * Read an 8 byte value from register described by desc into dest.
+ *
+ * @desc: register descriptor to read from
+ * @dest: destination to read the register value into
+ */
 static void read_reg(qemu_plugin_reg_descriptor *desc, uint64_t *dest)
 {
     GByteArray *reg_buf = g_byte_array_new();
@@ -275,6 +326,16 @@ static void read_reg(qemu_plugin_reg_descriptor *desc, uint64_t *dest)
     g_byte_array_free(reg_buf, TRUE);
 }
 
+/**
+ * read_current_ttbr - read TTBR0_EL1, TTBR1_EL1, and TCR_EL1
+ *
+ * Update the per-vCPU state cache with current values of TTBR0,
+ * TTBR1, and TCR registers.
+ * Must be called from instruction callback context of the
+ * CPU that needs update.
+ *
+ * @cache: per-vCPU cache to update
+ */
 static void read_current_ttbr(VCPUCache *cache)
 {
     // Read both TTBR0 and TTBR1
@@ -319,6 +380,13 @@ static void read_current_ttbr(VCPUCache *cache)
     return;
 }
 
+/**
+ * read_gp_register - read the value of a register
+ *
+ * @reg_name: name of the register to read
+ *
+ * Returns: value that was read from the register
+ */
 static uint64_t read_gp_register(const char *reg_name)
 {
     GArray *reg_list = qemu_plugin_get_registers();
@@ -340,6 +408,18 @@ static uint64_t read_gp_register(const char *reg_name)
     return value;
 }
 
+/**
+ * vcpu_ttbr_exec - instruction callback for modification to TTBR
+ *
+ * This callback is registered against instructions that modify the
+ * Translation Table Base Register (msr ttbr0/msr ttbr1). Rather
+ * than read the new values of TTBR registers in the callback, mark
+ * the per-vCPU cache dirty so the cached values can be updated at
+ * the next function call/return.
+ *
+ * @cpu_index: CPU that issued the msr ttbr instruction
+ * @udata: unused
+ */
 static void vcpu_ttbr_exec(unsigned int cpu_index, void *udata)
 {
     VCPUCache *cache = get_vcpu_cache(cpu_index);
@@ -352,6 +432,16 @@ static void vcpu_ttbr_exec(unsigned int cpu_index, void *udata)
     g_mutex_unlock(&cache->lock);
 }
 
+/**
+ * update_cached_ttbr - update the per-vCPU cached TTBR value
+ *
+ * Update the per-vCPU cached TTBR0 and TTBR1 values if they
+ * require update. Since reading registers is a time consuming
+ * operation, we cache these values and update them only if
+ * they are changed (per-vCPU dirty flag is set).
+ *
+ * @cache: pointer to per-vCPU cached state
+ */
 static void update_cached_ttbr(VCPUCache *cache)
 {
     g_assert_nonnull(cache);
@@ -364,6 +454,25 @@ static void update_cached_ttbr(VCPUCache *cache)
     g_mutex_unlock(&cache->lock);
 }
 
+/*
+ * vcpu_insn_exec - instruction callback for function calls and returns
+ *
+ * This callback is run for every dispatched instruction with the objective
+ * of maintaining the shadow call stacks for each thread.
+ * You might note that this callback is scheduled to run with every
+ * instruction, not just instructions that potentially modify the callstack.
+ * There are two ways to determine the return address - by reading the Link
+ * Register in the callback for the RET instruction, or reading the program
+ * counter in the callback for the instruction immediately following the
+ * RET instruction (instruction callbacks are run prior to instruction
+ * execution). It turns out reading the Link Register for every RET
+ * instruction is more costly than executing this callback after every
+ * single instruction, so we identify the return address using the latter
+ * approach.
+ *
+ * @cpu_index: CPU ID of the processor that issued the instruction.
+ * @udata: opaque pointer to InsnInfo
+ */
 static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
 {
     InsnInfo *info = (InsnInfo *)udata;
@@ -460,6 +569,17 @@ static void vcpu_insn_exec(unsigned int cpu_index, void *udata)
     g_mutex_unlock(&pstacks->lock);
 }
 
+/**
+ * vcpu_dump_callstack_cb - instruction callback to print current callstack
+ *
+ * This callback is scheduled to run if the current program counter is
+ * in the global list of triggers. Using the instruction information along
+ * with the cached per-vCPU state, the current callstack is retrieved and
+ * output via qemu_plugin_outs.
+ *
+ * @cpu_index: the CPU ID that the instruction was issued from
+ * @udata: the program counter (virtual address) of this instruction
+ */
 static void vcpu_dump_callstack_cb(unsigned int cpu_index, void *udata)
 {
     VCPUCache *cache;
@@ -494,6 +614,23 @@ static void vcpu_dump_callstack_cb(unsigned int cpu_index, void *udata)
     qemu_plugin_outs(report->str);
 }
 
+/**
+ * windvars_update_cb - callback on write to VxWorks taskIdCurrent
+ *
+ * This callback is invoked on each memory access. If the memory access
+ * modifies currentTaskId, then we update the per-vCPU cached state to
+ * reflect the new value of taskIdCurrent. This value is used to identify
+ * the callstack associated with the current execution context.
+ *
+ * The address of vxKernelVars is determined from the symbol table. The
+ * structure is indexed by CPU ID, and the first 8 byte field within
+ * each entry of vxKernelVars is the current task ID.
+ *
+ * @cpu_index: the CPU ID that the memory access was issued from
+ * @info: contains information about the memory access
+ * @vaddr: the virtual address that was accessed by the memory operation
+ * @udata: unused
+ */
 static void windvars_update_cb(unsigned int cpu_index, qemu_plugin_meminfo_t info,
                                uint64_t vaddr, void *udata)
 {
@@ -507,7 +644,6 @@ static void windvars_update_cb(unsigned int cpu_index, qemu_plugin_meminfo_t inf
      * on the 152 byte size of _windVars (as of vxWorks 25.03) aligned to
      * 128 bytes.
      */
-#define SIZE_WIND_VARS 256
     if (vaddr == (vxKernelVarsAddr + (cpu_index * SIZE_WIND_VARS)) &&
         qemu_plugin_mem_is_store(info)) {
         qemu_plugin_mem_value val;
@@ -521,6 +657,20 @@ static void windvars_update_cb(unsigned int cpu_index, qemu_plugin_meminfo_t inf
     return;
 }
 
+/*
+ * vcpu_tb_trans - translation block translation callback
+ *
+ * This function is registered in qemu_plugin_install and is called
+ * every time a translation occurs. Additional callbacks are
+ * registered on individual instruction executions and memory accesses
+ * as required.
+ *
+ * See vcpu_insn_exec, vcpu_ttbr_exec, vcpu_dump_callstack_cb, and
+ * windvars_update_cb.
+ *
+ * @id: plugin ID
+ * @tb: reference to translation block that the callback was invoked on
+ */
 static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
 {
     if (!tb) {
@@ -596,6 +746,16 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
     }
 }
 
+/**
+ * add_pc_match - add program counter to triggers array
+ *
+ * When system execution reaches a point where
+ * program counter == trigger address, the callstack
+ * corresponding to the current execution context will
+ * be output.
+ *
+ * @addr: program counter address to trigger callstack output.
+ */
 static void add_pc_match(char *addr)
 {
     uint64_t pc = g_ascii_strtoull(addr, NULL, 16);
@@ -607,6 +767,15 @@ static void add_pc_match(char *addr)
     g_array_append_val(triggers, pc);
 }
 
+/**
+ * parse_elf - parse symbol table from ELF file
+ *
+ * @elf_file: path to ELF file from which to parse symbols
+ * @symbols: hash table to populate with address to symbol mappings.
+ * @func_only: only parse FUNC symbols from ELF
+ *
+ * Returns: true if success, false otherwise.
+ */
 static bool parse_elf(const char *elf_file,
                       GHashTable *symbols,
                       bool func_only)
@@ -770,6 +939,15 @@ cleanup:
 
 }
 
+/**
+ * parse_vxKernelVars - find address of vxKernelVars from ELF
+ *
+ * @vxworks_elf: path to VxWorks ELF file
+ * @vxVarsAddr: address of vxKernelVars if found. Only valid
+ *               if return is TRUE.
+ *
+ * Returns: true if success, false otherwise.
+ */
 static bool parse_vxKernelVars(const char *vxworks_elf,
                                uint64_t *vxVarsAddr)
 {
@@ -803,8 +981,16 @@ static bool parse_vxKernelVars(const char *vxworks_elf,
     return found;
 }
 
-/* Parse ELF file and populate symbol map */
-static bool parse_func_symbols(const char *vxworks_elf,
+/**
+ * parse_func_symbols - parse only FUNC symbols from ELF
+ *
+ * @elf: file path to ELF
+ * @sym_map: the hash table to populate with address to
+ *           symbol mappings.
+ *
+ * Returns: true for success, false otherwise
+ */
+static bool parse_func_symbols(const char *elf,
                                GHashTable **sym_map)
 {
     GHashTable *syms = g_hash_table_new_full(g_direct_hash,
@@ -812,7 +998,7 @@ static bool parse_func_symbols(const char *vxworks_elf,
                                              NULL, g_free);
 
     if (syms) {
-        if (parse_elf(vxworks_elf, syms, true)) {
+        if (parse_elf(elf, syms, true)) {
             *sym_map = syms;
             return true;
         }
@@ -821,6 +1007,16 @@ static bool parse_func_symbols(const char *vxworks_elf,
     return false;
 }
 
+/**
+ * plugin_exit - cleanup routine run at plugin exit
+ *
+ * Print all the currently tracked call stacks.
+ * Clear mutexes
+ * Free all memory associated with:
+ *      Per-Process resources tracking tasks/threads
+ *      Per-Thread callstacks
+ *      Per-vCPU cached state
+ */
 static void plugin_exit(qemu_plugin_id_t id, void *p)
 {
     GHashTableIter iter;
@@ -875,6 +1071,13 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
     g_mutex_clear(&stacks_lock);
 }
 
+/**
+ * qemu_plugin_install - install the callstack TCG plugin
+ *
+ * Initialize data structures and register the following callbacks:
+ *      vcpu_tb_trans
+ *      plugin_exit
+ */
 QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
                                          const qemu_info_t *info,
                                          int argc, char **argv)
