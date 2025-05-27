@@ -991,7 +991,7 @@ static void versal_create_pcie(Versal *s, const struct VersalPcieMap *map)
     memory_region_add_subregion(&s->mr_ps, map->pio, ioport_reg);
 
     /* Map IRQs */
-    for (i = 0; i < GPEX_NUM_IRQS; i++) {
+    for (i = 0; i < PCI_NUM_PINS; i++) {
         versal_sysbus_connect_irq(s, SYS_BUS_DEVICE(dev), i, map->irq[i]);
         gpex_set_irq_num(GPEX_HOST(dev), i, map->irq[i]);
     }
