@@ -517,11 +517,10 @@ static const VMStateDescription vmstate_flexcan = {
     }
 };
 
-static Property flexcan_core_properties[] = {
+static const Property flexcan_core_properties[] = {
     // todo: other properties?
     DEFINE_PROP_LINK("canbus", FslFlexCanState, canbus,
                      TYPE_CAN_BUS, CanBusState *),
-    DEFINE_PROP_END_OF_LIST(),
 };
 
 static void flexcan_class_init(ObjectClass *oc, void *data)

@@ -2267,14 +2267,13 @@ static void smmu500_finalize(Object *obj)
     smmu_free_rai(s, s->rai_cb, s->cfg.num_cb * NUM_REGS_PER_CB);
 }
 
-static Property smmu_properties[] = {
+static const Property smmu_properties[] = {
     DEFINE_PROP_UINT32("pamax", SMMU500State, cfg.pamax, 48),
     DEFINE_PROP_UINT16("num-smr", SMMU500State, cfg.num_smr, 48),
     DEFINE_PROP_UINT16("num-cb", SMMU500State, cfg.num_cb, 16),
     DEFINE_PROP_UINT16("num-pages", SMMU500State, cfg.num_pages, 16),
     DEFINE_PROP_BOOL("ato", SMMU500State, cfg.ato, true),
     DEFINE_PROP_UINT8("version", SMMU500State, cfg.version, 0x21),
-    DEFINE_PROP_END_OF_LIST(),
 };
 
 static const VMStateDescription vmstate_smmu500 = {
