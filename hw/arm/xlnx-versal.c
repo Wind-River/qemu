@@ -231,7 +231,7 @@ static void versal_create_pcie(Versal *s, qemu_irq *pic)
     memory_region_add_subregion(&s->mr_ps, MM_PCIE_PIO, ioport_reg);
 
     /* Map IRQs */
-    for (i = 0; i < GPEX_NUM_IRQS; i++) {
+    for (i = 0; i < PCI_NUM_PINS; i++) {
         sysbus_connect_irq(SYS_BUS_DEVICE(dev), i,
                            pic[VERSAL_PCIE_IRQ_0 + i]);
         gpex_set_irq_num(GPEX_HOST(dev), i, VERSAL_PCIE_IRQ_0 + i);
