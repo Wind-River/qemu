@@ -22,9 +22,9 @@
 #include "qemu/units.h"
 #include "qemu/error-report.h"
 #include "qapi/error.h"
-#include "qapi/qmp/qlist.h"
-#include "sysemu/device_tree.h"
-#include "sysemu/sysemu.h"
+#include "qobject/qlist.h"
+#include "system/device_tree.h"
+#include "system/system.h"
 #include "cpu.h"
 #include "exec/address-spaces.h"
 

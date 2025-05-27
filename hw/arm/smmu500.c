@@ -33,7 +33,7 @@
 #include "qemu/log.h"
 #include "qapi/error.h"
 #include "qemu/error-report.h"
-#include "sysemu/dma.h"
+#include "system/dma.h"
 #include "migration/vmstate.h"
 #include "hw/qdev-properties.h"
 #include "hw/arm/smmu500.h"
