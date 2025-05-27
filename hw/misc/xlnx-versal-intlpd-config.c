@@ -919,9 +919,8 @@ static const VMStateDescription vmstate_intlpd_config = {
     }
 };
 
-static Property intlpd_properties[] = {
+static const Property intlpd_properties[] = {
     DEFINE_PROP_INT32("timeout", INTLPD_CONFIG, tov, 0),
-    DEFINE_PROP_END_OF_LIST()
 };
 
 static void intlpd_config_class_init(ObjectClass *klass, void *data)
