@@ -346,9 +346,8 @@ static const VMStateDescription vmstate_fsl_linflex = {
     },
 };
 
-static Property fsl_linflex_properties[] = {
+static const Property fsl_linflex_properties[] = {
     DEFINE_PROP_CHR("chardev", FslLinflexState, chr),
-    DEFINE_PROP_END_OF_LIST(),
 };
 
 static void fsl_linflex_class_init(ObjectClass *oc, void *data)
