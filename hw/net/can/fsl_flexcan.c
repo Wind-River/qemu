@@ -19,11 +19,11 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/sysbus.h"
-#include "hw/irq.h"
+#include "hw/core/sysbus.h"
+#include "hw/core/irq.h"
 #include "qapi/error.h"
 #include "migration/vmstate.h"
-#include "hw/qdev-properties.h"
+#include "hw/core/qdev-properties.h"
 #include "net/can_emu.h"
 #include "net/can_host.h"
 #include "hw/net/fsl_flexcan.h"
@@ -523,7 +523,7 @@ static const Property flexcan_core_properties[] = {
                      TYPE_CAN_BUS, CanBusState *),
 };
 
-static void flexcan_class_init(ObjectClass *oc, void *data)
+static void flexcan_class_init(ObjectClass *oc, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(oc);
     ResettableClass *rc = RESETTABLE_CLASS(oc);

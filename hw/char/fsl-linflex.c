@@ -22,9 +22,9 @@
 #include "migration/vmstate.h"
 #include "qemu/log.h"
 #include "hw/char/fsl-linflex.h"
-#include "hw/irq.h"
-#include "hw/qdev-properties.h"
-#include "hw/qdev-properties-system.h"
+#include "hw/core/irq.h"
+#include "hw/core/qdev-properties.h"
+#include "hw/core/qdev-properties-system.h"
 
 static void fsl_linflex_update_irq(FslLinflexState *s)
 {
@@ -350,7 +350,7 @@ static const Property fsl_linflex_properties[] = {
     DEFINE_PROP_CHR("chardev", FslLinflexState, chr),
 };
 
-static void fsl_linflex_class_init(ObjectClass *oc, void *data)
+static void fsl_linflex_class_init(ObjectClass *oc, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(oc);
     ResettableClass *rc = RESETTABLE_CLASS(oc);

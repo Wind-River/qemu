@@ -21,14 +21,14 @@
 #ifndef QEMU_WR_ARM_H
 #define QEMU_WR_ARM_H
 
-#include "hw/sysbus.h"
+#include "hw/core/sysbus.h"
 #include "hw/cpu/cluster.h"
 #include "hw/arm/boot.h"
 #include "hw/arm/bsa.h"
 #include "hw/intc/arm_gicv3.h"
 #include "hw/char/pl011.h"
-#include "hw/boards.h"
-#include "hw/qdev-properties.h"
+#include "hw/core/boards.h"
+#include "hw/core/qdev-properties.h"
 #include "hw/arm/fdt.h"
 #include "hw/misc/unimp.h"
 #include "qom/object.h"

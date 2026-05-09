@@ -38,12 +38,12 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/sysbus.h"
-#include "hw/register.h"
+#include "hw/core/sysbus.h"
+#include "hw/core/register.h"
 #include "qemu/bitops.h"
 #include "qemu/log.h"
 #include "migration/vmstate.h"
-#include "hw/irq.h"
+#include "hw/core/irq.h"
 #include "hw/misc/xlnx-versal-lpd-iou-slcr.h"
 
 #ifndef XILINX_LPD_IOU_SLCR_ERR_DEBUG
@@ -711,7 +711,7 @@ static const VMStateDescription vmstate_lpd_iou_slcr = {
     }
 };
 
-static void lpd_iou_slcr_class_init(ObjectClass *klass, void *data)
+static void lpd_iou_slcr_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     ResettableClass *rc = RESETTABLE_CLASS(klass);

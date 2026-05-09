@@ -26,16 +26,16 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/sysbus.h"
-#include "hw/register.h"
-#include "hw/irq.h"
+#include "hw/core/sysbus.h"
+#include "hw/core/register.h"
+#include "hw/core/irq.h"
 #include "qemu/bitops.h"
 #include "qemu/log.h"
 #include "qapi/error.h"
 #include "qemu/error-report.h"
 #include "system/dma.h"
 #include "migration/vmstate.h"
-#include "hw/qdev-properties.h"
+#include "hw/core/qdev-properties.h"
 #include "hw/arm/smmu500.h"
 
 #ifndef XILINX_SMMU500_ERR_DEBUG
@@ -2059,8 +2059,6 @@ static int smmu_populate_regarray(SMMU500State *s,
         int index = rae[i].addr / 4;
         RegisterInfo *r = &s->regs_info[index];
 
-        object_initialize((void *)r, sizeof(*r), TYPE_REGISTER);
-
         *r = (RegisterInfo) {
             .data = &s->regs[index],
             .data_size = sizeof(uint32_t),
@@ -2286,7 +2284,7 @@ static const VMStateDescription vmstate_smmu500 = {
     }
 };
 
-static void smmu500_class_init(ObjectClass *klass, void *data)
+static void smmu500_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     ResettableClass *rc = RESETTABLE_CLASS(klass);
@@ -2298,7 +2296,7 @@ static void smmu500_class_init(ObjectClass *klass, void *data)
 }
 
 static void smmu500_iommu_memory_region_class_init(ObjectClass *klass,
-                                                   void *data)
+                                                   const void *data)
 {
     IOMMUMemoryRegionClass *imrc = IOMMU_MEMORY_REGION_CLASS(klass);
 
