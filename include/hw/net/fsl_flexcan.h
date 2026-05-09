@@ -22,9 +22,9 @@
 #ifndef HW_FLEXCAN_FSL_H
 #define HW_FLEXCAN_FSL_H
 
-#include "hw/register.h"
+#include "hw/core/register.h"
 #include "net/can_emu.h"
-#include "hw/qdev-clock.h"
+#include "hw/core/qdev-clock.h"
 
 #define TYPE_FSL_FLEXCAN "fsl.flexcan"
 

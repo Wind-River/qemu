@@ -22,7 +22,7 @@
 #ifndef XLNX_VERSAL_LPD_SLCR_H
 #define XLNX_VERSAL_LPD_SLCR_H
 
-#include "hw/register.h"
+#include "hw/core/register.h"
 #include "qom/object.h"
 
 #define TYPE_XILINX_LPD_SLCR "xlnx.versal-lpd-slcr"
