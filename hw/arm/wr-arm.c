@@ -26,7 +26,7 @@
 #include "system/device_tree.h"
 #include "system/system.h"
 #include "cpu.h"
-#include "exec/address-spaces.h"
+#include "system/address-spaces.h"
 
 #include "hw/arm/wr-arm.h"
 
@@ -388,7 +388,7 @@ static void wr_arm_init(MachineState *machine)
     arm_load_kernel(&s->cpus[0], machine, &s->binfo);
 }
 
-static void wr_arm_machine_class_init(ObjectClass *oc, void *data)
+static void wr_arm_machine_class_init(ObjectClass *oc, const void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
 

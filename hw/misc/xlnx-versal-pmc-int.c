@@ -38,12 +38,12 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/sysbus.h"
-#include "hw/register.h"
+#include "hw/core/sysbus.h"
+#include "hw/core/register.h"
 #include "qemu/bitops.h"
 #include "qemu/log.h"
 #include "migration/vmstate.h"
-#include "hw/irq.h"
+#include "hw/core/irq.h"
 #include "hw/misc/xlnx-versal-pmc-int.h"
 
 #ifndef XILINX_PMC_INT_REGS_ERR_DEBUG
@@ -1195,7 +1195,7 @@ static const VMStateDescription vmstate_pmc_int_regs = {
     }
 };
 
-static void pmc_int_regs_class_init(ObjectClass *klass, void *data)
+static void pmc_int_regs_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     ResettableClass *rc = RESETTABLE_CLASS(klass);

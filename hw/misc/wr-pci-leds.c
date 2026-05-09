@@ -42,7 +42,7 @@ static void pci_my_device_realize(PCIDevice *dev, Error **errp)
     pci_register_bar(dev, 0 , PCI_BASE_ADDRESS_SPACE_MEMORY, &s->bar);
 
 }
-static void my_device_class_init(ObjectClass *klass, void *data)
+static void my_device_class_init(ObjectClass *klass, const void *data)
 {
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 

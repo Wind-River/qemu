@@ -21,7 +21,7 @@
 #ifndef QEMU_NXP_S32G_H
 #define QEMU_NXP_S32G_H
 
-#include "hw/sysbus.h"
+#include "hw/core/sysbus.h"
 #include "hw/cpu/cluster.h"
 #include "hw/arm/boot.h"
 #include "hw/arm/bsa.h"

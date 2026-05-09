@@ -39,13 +39,13 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/sysbus.h"
-#include "hw/register.h"
+#include "hw/core/sysbus.h"
+#include "hw/core/register.h"
 #include "qemu/bitops.h"
 #include "qemu/log.h"
 #include "migration/vmstate.h"
-#include "hw/irq.h"
-#include "hw/qdev-properties.h"
+#include "hw/core/irq.h"
+#include "hw/core/qdev-properties.h"
 #include "hw/misc/xlnx-versal-intlpd-config.h"
 
 #ifndef XILINX_INTLPD_CONFIG_ERR_DEBUG
@@ -923,7 +923,7 @@ static const Property intlpd_properties[] = {
     DEFINE_PROP_INT32("timeout", INTLPD_CONFIG, tov, 0),
 };
 
-static void intlpd_config_class_init(ObjectClass *klass, void *data)
+static void intlpd_config_class_init(ObjectClass *klass, const void *data)
 {
     ResettableClass *rc = RESETTABLE_CLASS(klass);
     DeviceClass *dc = DEVICE_CLASS(klass);

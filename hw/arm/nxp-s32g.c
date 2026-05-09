@@ -26,12 +26,12 @@
 #include "system/device_tree.h"
 #include "system/system.h"
 #include "cpu.h"
-#include "hw/boards.h"
-#include "hw/qdev-properties.h"
+#include "hw/core/boards.h"
+#include "hw/core/qdev-properties.h"
 #include "hw/arm/nxp-s32g.h"
 #include "hw/arm/fdt.h"
 #include "hw/misc/unimp.h"
-#include "exec/address-spaces.h"
+#include "system/address-spaces.h"
 
 
 static void *s32g_get_dtb(const struct arm_boot_info *binfo)
@@ -539,7 +539,7 @@ static void nxp_s32g_machine_instance_init(Object *obj)
                              0);
 }
 
-static void nxp_s32g_machine_class_init(ObjectClass *oc, void *data)
+static void nxp_s32g_machine_class_init(ObjectClass *oc, const void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
 

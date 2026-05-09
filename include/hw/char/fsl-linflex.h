@@ -21,7 +21,7 @@
 #ifndef FSL_LINFLEXUART_H
 #define FSL_LINFLEXUART_H
 
-#include "hw/sysbus.h"
+#include "hw/core/sysbus.h"
 #include "chardev/char-fe.h"
 #include "qom/object.h"
 
@@ -60,7 +60,7 @@ struct FslLinflexState {
     MemoryRegion iomem;
     uint32_t regs[LINFLEX_REGS_MAX];
 
-    CharBackend chr;
+    CharFrontend chr;
     qemu_irq irq;
 };
 
