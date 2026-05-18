@@ -1083,13 +1083,10 @@ static DeviceState *versal_create_cpu(Versal *s,
                                       size_t core_idx)
 {
     DeviceState *cpu = qdev_new(map->cpu_model);
-    ARMCPU *arm_cpu = ARM_CPU(cpu);
     Object *obj = OBJECT(cpu);
     uint64_t affinity;
     bool start_off;
-    size_t idx = cluster_idx * map->num_core + core_idx;
     g_autofree char *name;
-    g_autofree char *node = NULL;
 
     affinity = map->mp_affinity.base;
     affinity |= (cluster_idx & 0xff) << map->mp_affinity.cluster_shift;
@@ -1108,9 +1105,16 @@ static DeviceState *versal_create_cpu(Versal *s,
     object_property_set_link(obj, "memory", OBJECT(cpu_mr), &error_abort);
     qdev_realize_and_unref(cpu, NULL, &error_fatal);
 
-    if (!map->dtb_expose) {
-        return cpu;
-    }
+    return cpu;
+}
+
+static void versal_create_cpu_dtb(Versal *s, const VersalCpuClusterMap *map,
+                                  DeviceState *cpu, size_t cluster_idx,
+                                  size_t core_idx)
+{
+    ARMCPU *arm_cpu = ARM_CPU(cpu);
+    size_t idx = cluster_idx * map->num_core + core_idx;
+    g_autofree char *node = NULL;
 
     node = versal_fdt_add_subnode(s, "/cpus/cpu", idx,
                                   arm_cpu->dtb_compatible,
@@ -1119,8 +1123,6 @@ static DeviceState *versal_create_cpu(Versal *s,
                           arm_cpu_mp_affinity(arm_cpu) & ARM64_AFFINITY_MASK);
     qemu_fdt_setprop_string(s->cfg.fdt, node, "device_type", "cpu");
     qemu_fdt_setprop_string(s->cfg.fdt, node, "enable-method", "psci");
-
-    return cpu;
 }
 
 #define VERSAL_GEM0_TBUID       0x0
@@ -1185,6 +1187,20 @@ static void versal_create_cpu_cluster(Versal *s, const VersalCpuClusterMap *map)
 
     qdev_realize_and_unref(cluster, NULL, &error_fatal);
 
+    /*
+     * Create CPU DTS nodes in reverse order because fdt_add_subnode prepends.
+     * This ensures CPU 0 appears first in the DTS, which VxWorks requires
+     * for correct PPI-to-CPU affinity mapping.
+     */
+    if (map->dtb_expose) {
+        for (i = map->num_cluster; i > 0; i--) {
+            for (j = map->num_core; j > 0; j--) {
+                versal_create_cpu_dtb(s, map,
+                                      cpus[(i - 1) * map->num_core + (j - 1)],
+                                      i - 1, j - 1);
+            }
+        }
+    }
     if (!map->per_cluster_gic) {
         versal_create_and_connect_gic(s, map, mr, cpus,
                                       map->num_cluster * map->num_core);
