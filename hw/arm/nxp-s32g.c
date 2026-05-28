@@ -29,6 +29,7 @@
 #include "hw/core/boards.h"
 #include "hw/core/qdev-properties.h"
 #include "hw/arm/nxp-s32g.h"
+#include "hw/arm/machines-qom.h"
 #include "hw/arm/fdt.h"
 #include "hw/misc/unimp.h"
 #include "system/address-spaces.h"
@@ -573,6 +574,7 @@ static const TypeInfo nxp_s32g_machine_info = {
     .instance_size = sizeof(NxpS32gState),
     .class_init = nxp_s32g_machine_class_init,
     .instance_init = nxp_s32g_machine_instance_init,
+    .interfaces = aarch64_machine_interfaces,
 };
 
 static void nxp_s32g_machine_init(void)
