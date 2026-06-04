@@ -1,5 +1,5 @@
 =========================================
-VxWorks 24.03 on nxp-s32g machine
+VxWorks 26.03 on nxp-s32g machine
 =========================================
 
 This document contains steps to build a basic VxWorks project for the QEMU nxp-s32g machine.
@@ -27,6 +27,12 @@ support for this, add the following config to your VSB:
 .. code::
 
  $ vxprj vsb add CAN
+
+Enable `_WRS_CONFIG_SERVICE_VIRTIO` so the components `INCLUDE_NET_VIRTIO`, `DRV_FDT_VIRTIO`, and `INCLUDE_VIRTIO_LIB` can be added to the VIP:
+
+.. code::
+
+ $ vxprj vsb config -s -add _WRS_CONFIG_SERVICE_VIRTIO=y
 
 Build the VxWorks Source Build project
 
