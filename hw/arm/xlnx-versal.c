@@ -947,60 +947,18 @@ static inline void versal_create_and_connect_gic(Versal *s,
     }
 }
 
-static void versal_create_pcie(Versal *s, const struct VersalPcieMap *map)
+/*
+ * Create the PCIe FDT node before the GIC/ITS FDT node is added. FDT
+ * subnodes are prepended, so creating the PCIe node early keeps GIC/ITS
+ * before PCIe in the final DTB. Some guests rely on this order so the
+ * MSI controller is registered before PCIe devices are attached.
+ */
+static void versal_create_pcie_fdt(Versal *s, const struct VersalPcieMap *map)
 {
-    DeviceState *dev;
-    PCIHostState *pci;
-    MemoryRegion *ecam_alias;
-    MemoryRegion *ecam_reg;
-    MemoryRegion *mmio_alias;
-    MemoryRegion *mmio_high_alias;
-    MemoryRegion *mmio_reg;
-    MemoryRegion *ioport_reg;
     g_autofree char *node = NULL;
     const char compat[] = "pci-host-ecam-generic";
     int num_buses;
-    int i;
-
-    dev = qdev_new(TYPE_GPEX_HOST);
-    object_property_add_child(OBJECT(s), "pcie", OBJECT(dev));
-    sysbus_realize_and_unref(SYS_BUS_DEVICE(dev), &error_fatal);
-
-    /* Map ECAM space */
-    ecam_alias = g_new0(MemoryRegion, 1);
-    ecam_reg = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 0);
-    memory_region_init_alias(ecam_alias, OBJECT(dev), "pcie-ecam",
-                             ecam_reg, 0, map->ecam_size);
-    memory_region_add_subregion(&s->mr_ps, map->ecam, ecam_alias);
-
-    /* Map MMIO window */
-    mmio_alias = g_new0(MemoryRegion, 1);
-    mmio_reg = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 1);
-    memory_region_init_alias(mmio_alias, OBJECT(dev), "pcie-mmio",
-                             mmio_reg, map->mmio, map->mmio_size);
-    memory_region_add_subregion(&s->mr_ps, map->mmio, mmio_alias);
-
-    /* Map high MMIO window */
-    mmio_high_alias = g_new0(MemoryRegion, 1);
-    memory_region_init_alias(mmio_high_alias, OBJECT(dev), "pcie-mmio-high",
-                             mmio_reg, map->mmio_high, map->mmio_high_size);
-    memory_region_add_subregion(&s->mr_ps, map->mmio_high, mmio_high_alias);
-
-    /* Map IO port space */
-    ioport_reg = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 2);
-    memory_region_add_subregion(&s->mr_ps, map->pio, ioport_reg);
-
-    /* Map IRQs */
-    for (i = 0; i < PCI_NUM_PINS; i++) {
-        versal_sysbus_connect_irq(s, SYS_BUS_DEVICE(dev), i, map->irq[i]);
-        gpex_set_irq_num(GPEX_HOST(dev), i, map->irq[i]);
-    }
-
-    /* configure root complex */
-    pci = PCI_HOST_BRIDGE(dev);
-    pci->bypass_iommu = true;
-
-    /* FDT generation */
+     /* FDT generation */
     num_buses = map->ecam_size / PCIE_MMCFG_SIZE_MIN;
     node = g_strdup_printf("/pcie@%" PRIx64, map->mmio);
     qemu_fdt_add_subnode(s->cfg.fdt, node);
@@ -1073,6 +1031,57 @@ static void versal_create_pcie(Versal *s, const struct VersalPcieMap *map)
                                  2, map->ecam, 2, map->ecam_size);
     qemu_fdt_setprop(s->cfg.fdt, node, "compatible",
                      compat, sizeof(compat));
+}
+
+static void versal_create_pcie(Versal *s, const struct VersalPcieMap *map)
+{
+    DeviceState *dev;
+    PCIHostState *pci;
+    MemoryRegion *ecam_alias;
+    MemoryRegion *ecam_reg;
+    MemoryRegion *mmio_alias;
+    MemoryRegion *mmio_high_alias;
+    MemoryRegion *mmio_reg;
+    MemoryRegion *ioport_reg;
+    int i;
+
+    dev = qdev_new(TYPE_GPEX_HOST);
+    object_property_add_child(OBJECT(s), "pcie", OBJECT(dev));
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(dev), &error_fatal);
+
+    /* Map ECAM space */
+    ecam_alias = g_new0(MemoryRegion, 1);
+    ecam_reg = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 0);
+    memory_region_init_alias(ecam_alias, OBJECT(dev), "pcie-ecam",
+                             ecam_reg, 0, map->ecam_size);
+    memory_region_add_subregion(&s->mr_ps, map->ecam, ecam_alias);
+
+    /* Map MMIO window */
+    mmio_alias = g_new0(MemoryRegion, 1);
+    mmio_reg = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 1);
+    memory_region_init_alias(mmio_alias, OBJECT(dev), "pcie-mmio",
+                             mmio_reg, map->mmio, map->mmio_size);
+    memory_region_add_subregion(&s->mr_ps, map->mmio, mmio_alias);
+
+    /* Map high MMIO window */
+    mmio_high_alias = g_new0(MemoryRegion, 1);
+    memory_region_init_alias(mmio_high_alias, OBJECT(dev), "pcie-mmio-high",
+                             mmio_reg, map->mmio_high, map->mmio_high_size);
+    memory_region_add_subregion(&s->mr_ps, map->mmio_high, mmio_high_alias);
+
+    /* Map IO port space */
+    ioport_reg = sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 2);
+    memory_region_add_subregion(&s->mr_ps, map->pio, ioport_reg);
+
+    /* Map IRQs */
+    for (i = 0; i < PCI_NUM_PINS; i++) {
+        versal_sysbus_connect_irq(s, SYS_BUS_DEVICE(dev), i, map->irq[i]);
+        gpex_set_irq_num(GPEX_HOST(dev), i, map->irq[i]);
+    }
+
+    /* configure root complex */
+    pci = PCI_HOST_BRIDGE(dev);
+    pci->bypass_iommu = true;
 }
 
 static DeviceState *versal_create_cpu(Versal *s,
@@ -2244,10 +2253,6 @@ static void versal_realize_common(Versal *s)
         versal_create_smmu(s, &map->smmu);
     }
 
-    if (map->pcie.mmio) {
-        versal_create_pcie(s, &map->pcie);
-    }
-
     if (map->lpd_iou_slcr) {
         versal_create_lpd_iou_slcr(s, map->lpd_iou_slcr);
     }
@@ -2289,8 +2294,10 @@ static void versal_realize_common(Versal *s)
 static void versal_realize(DeviceState *dev, Error **errp)
 {
     Versal *s = XLNX_VERSAL_BASE(dev);
-
+    const VersalMap *map = versal_get_map(s);
+    versal_create_pcie_fdt(s, &map->pcie);
     versal_realize_common(s);
+    versal_create_pcie(s, &map->pcie);
     versal_unimp(s);
 }
 
