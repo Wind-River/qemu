@@ -1,5 +1,5 @@
 =========================================
-VxWorks 24.03 on xlnx-versal-virt machine
+VxWorks 26.03 on xlnx-versal-virt machine
 =========================================
 
 This document contains steps to build a basic VxWorks project for the QEMU xlnx-versal-virt machine.
@@ -18,7 +18,7 @@ From the workstation terminal, after setting up wrenv, run the following command
 
 .. code::
 
- $ vxprj vsb create -lp64 -debug -bsp xlnx_versal vsb_xlnx_versal -S
+ $ vxprj vsb create -lp64 -debug -bsp amd_versal vsb_xlnx_versal -S
  $ cd vsb_xlnx_versal
  $ make
 
@@ -30,7 +30,7 @@ From the workstation terminal, after building the VxWorks Source Build project, 
 
 .. code::
 
- $ vxprj create llvm -smp -debug -vsb vsb_xlnx_versal -profile PROFILE_DEVELOPMENT xlnx_versal vip_xlnx_versal_smp
+ $ vxprj create llvm -smp -debug -vsb vsb_xlnx_versal -profile PROFILE_DEVELOPMENT amd_versal vip_xlnx_versal_smp
  $ cd vip_xlnx_versal_smp
 
 For networking support using the built-in Cadence GEM network adapter, include the Generic PHY component:
@@ -60,7 +60,19 @@ For virtio-net-pci support, add the following components:
  $ vxprj component add INCLUDE_VIRTIO_LIB
  $ vxprj component add DRV_PCI_VIRTIO
 
+For MSI-X support with Intel e1000/e1000e/igb PCIe pluggable NICs, add the
+GICv3 ITS component:
+
+.. code::
+
+ $ vxprj component add DRV_INTCTLR_FDT_ARM_GIC_V3_ITS
+
+The ``DRV_INTCTLR_FDT_ARM_GIC_V3_ITS`` component also adds the required
+``DRV_INTCTLR_ARM_GIC_V3_ITS`` component. This is required for PCIe MSI-X
+interrupt support on the xlnx-versal-virt machine.
+
 Build the VxWorks Image Project
+===============================
 
 .. code::
 
@@ -98,7 +110,7 @@ following options:
      -m 4096 \
      -nographic \
      -kernel /path/to/VIP/default/uVxWorks \
-     -nic user,id=gem0
+     -nic user,id=gem0 \
      -append "gem(0,0)host:vxWorks h=10.0.2.2 e=10.0.2.15:ffffff00 g=10.0.2.2 u=target pw=vxTarget f=0x1"
 
 With Attached PCIe devices
@@ -134,4 +146,23 @@ virtio-net-pci NIC
      -netdev user,id=net0 \
      -device virtio-net-pci,disable-legacy=on,netdev=net0,mac=00:00:e8:01:02:04 \
      -append "virtioNet(0,0)host:vxWorks h=10.0.2.2 e=10.0.2.15:ffffff00 g=10.0.2.2 u=target pw=vxTarget f=0x1"
+
+Troubleshooting
+===============
+
+Network Symbol Table Error
+---------------------------
+
+If you happen to see a network symbol table error:
+
+.. code::
+
+ Error opening /host.host/vxWorks.sym: status = 0x290010
+
+Add the standalone symbol table component to your project, which removes the dependency on the network symbol table:
+
+.. code::
+
+ $ vxprj component add INCLUDE_STANDALONE_SYM_TBL
+
 
