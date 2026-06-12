@@ -1122,14 +1122,13 @@ static void versal_create_cpu_dtb(Versal *s, const VersalCpuClusterMap *map,
                                   size_t core_idx)
 {
     ARMCPU *arm_cpu = ARM_CPU(cpu);
-    size_t idx = cluster_idx * map->num_core + core_idx;
+    uint64_t affinity = arm_cpu_mp_affinity(arm_cpu) & ARM64_AFFINITY_MASK;
     g_autofree char *node = NULL;
 
-    node = versal_fdt_add_subnode(s, "/cpus/cpu", idx,
+    node = versal_fdt_add_subnode(s, "/cpus/cpu", affinity,
                                   arm_cpu->dtb_compatible,
                                   strlen(arm_cpu->dtb_compatible) + 1);
-    qemu_fdt_setprop_cell(s->cfg.fdt, node, "reg",
-                          arm_cpu_mp_affinity(arm_cpu) & ARM64_AFFINITY_MASK);
+    qemu_fdt_setprop_cell(s->cfg.fdt, node, "reg", affinity);
     qemu_fdt_setprop_string(s->cfg.fdt, node, "device_type", "cpu");
     qemu_fdt_setprop_string(s->cfg.fdt, node, "enable-method", "psci");
 }
