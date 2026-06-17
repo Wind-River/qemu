@@ -131,3 +131,21 @@ To boot and run VxWorks with FlexCAN controller connected to the virtual CAN int
      -object can-bus,id=canbus0-bus \
      -machine canbus0=canbus0-bus \
      -object can-host-socketcan,id=socketcan0,if=vcan0,canbus=canbus0-bus
+
+Troubleshooting
+===============
+
+Network Symbol Table Error
+---------------------------
+
+If you happen to see a network symbol table error:
+
+.. code::
+
+ Error opening /host.host/vxWorks.sym: status = 0x290010
+
+Add the standalone symbol table component to your project, which removes the dependency on the network symbol table:
+
+.. code::
+
+ $ vxprj component add INCLUDE_STANDALONE_SYM_TBL
