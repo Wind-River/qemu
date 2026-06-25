@@ -1,6 +1,6 @@
 # ci.yml, WR QEMU github CI configuration file.
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2026 Wind River Systems, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -18,6 +18,12 @@
 name: WR QEMU CI
 
 on:
+  workflow_dispatch:
+    inputs:
+      clean_build:
+        description: 'Clear ccache for a fully clean build'
+        type: boolean
+        default: false
   push:
     branches:
       - wr-integration
@@ -35,18 +41,28 @@ jobs:
           repository: Wind-River/qemu
           path: qemu
           # Use a specific branch or tag if needed
-          ref: wr-integration
+          # ref: wr-integration
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: ~/apt-cache
+          key: apt-${{ runner.os }}-${{ hashFiles('qemu/.github/workflows/ci.yml') }}
+          restore-keys: |
+            apt-${{ runner.os }}-
 
       - name: Set up dependencies
         run: |
+          sudo mkdir -p ~/apt-cache
           sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt-get install -y -o Dir::Cache::Archives="$HOME/apt-cache" \
             acpica-tools \
             autoconf \
             automake \
             bison \
             bzip2 \
             build-essential \
+            ccache \
             cmake \
             curl \
             flex \
@@ -74,17 +90,44 @@ jobs:
             vsftpd \
             wget \
             zlib1g-dev
+            
+      - name: Clear ccache (if requested)
+        if: ${{ github.event.inputs.clean_build == 'true' }}
+        run: ccache --clear
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=max_size=1G
+          ccache --zero-stats
 
       - name: Build QEMU
         working-directory: qemu
         run: |
-          ./configure --target-list="aarch64-softmmu,x86_64-softmmu" --enable-fdt --enable-plugins --enable-slirp --enable-capstone
-          make -j $(cat /proc/cpuinfo | grep "^processor" | wc -l)
+          export PATH="/usr/lib/ccache:$PATH"
+          ./configure --target-list="aarch64-softmmu,x86_64-softmmu" --enable-fdt --enable-plugins --enable-slirp --enable-capstone --disable-vhost-net --disable-vhost-user
+          make -j$(nproc)
           make plugins
           make check-build
+
+      - name: Print ccache stats
+        run: ccache --show-stats
 
       - name: Run QEMU tests
         working-directory: qemu
         run: |
           V=1 make check
 
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: meson-test-logs
+          path: qemu/build/meson-logs/testlog.txt
