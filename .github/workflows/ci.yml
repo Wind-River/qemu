@@ -33,7 +33,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout QEMU source
         uses: actions/checkout@v4
@@ -73,6 +73,7 @@ jobs:
             libelf1 \
             libfdt-dev \
             libglib2.0-dev \
+            libgnutls28-dev \
             libncurses5-dev \
             libpixman-1-dev \
             libslirp-dev \
@@ -82,9 +83,12 @@ jobs:
             libz-dev \
             make \
             ninja-build \
+            pylint \
             python3 \
             python3-pip \
             screen \
+            socat \
+            swtpm \
             texinfo \
             unzip \
             vsftpd \
@@ -112,7 +116,7 @@ jobs:
         working-directory: qemu
         run: |
           export PATH="/usr/lib/ccache:$PATH"
-          ./configure --target-list="aarch64-softmmu,x86_64-softmmu" --enable-fdt --enable-plugins --enable-slirp --enable-capstone --disable-vhost-net --disable-vhost-user
+          ./configure --target-list="aarch64-softmmu,x86_64-softmmu" --enable-fdt --enable-plugins --enable-slirp --enable-capstone --disable-vhost-net --disable-vhost-user --enable-gnutls
           make -j$(nproc)
           make plugins
           make check-build
