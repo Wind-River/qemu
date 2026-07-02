@@ -116,7 +116,7 @@ jobs:
         working-directory: qemu
         run: |
           export PATH="/usr/lib/ccache:$PATH"
-          ./configure --target-list="aarch64-softmmu,x86_64-softmmu" --enable-fdt --enable-plugins --enable-slirp --enable-capstone --disable-vhost-net --disable-vhost-user --enable-gnutls
+          ./configure --target-list="arm-softmmu,aarch64-softmmu,x86_64-softmmu" --enable-fdt --enable-plugins --enable-slirp --enable-capstone --disable-vhost-net --disable-vhost-user --enable-gnutls
           make -j$(nproc)
           make plugins
           make check-build
@@ -124,8 +124,15 @@ jobs:
       - name: Print ccache stats
         run: ccache --show-stats
 
+      - name: Set up VxWorks Sabrelite SDK
+        run: |
+          git clone https://${{ secrets.VXWORKS_IMAGES_TOKEN }}@github.com/hungmtruong/vxworks-images.git \
+            ${{ github.workspace }}/vxworks-images
+
       - name: Run QEMU tests
         working-directory: qemu
+        env:
+          QEMU_TEST_VXWORKS_SABRELITE_SDK: ${{ github.workspace }}/vxworks-images
         run: |
           V=1 make check
 
