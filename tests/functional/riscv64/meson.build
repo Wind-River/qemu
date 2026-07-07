@@ -8,6 +8,7 @@ test_riscv64_timeouts = {
 tests_riscv64_system_quick = [
   'migration',
   'opensbi',
+  'sifive_u_vxworks',
 ]
 
 tests_riscv64_system_thorough = [
