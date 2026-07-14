@@ -324,8 +324,8 @@ static const VersalMap VERSAL_MAP = {
     .sdhci[1] = { 0xf1050000, 128 },
     .num_sdhci = 2,
 
-    .gem[0] = { { 0xff0c0000, 56 }, 2, "rgmii-id", 1000, 0xc, 0x234 },
-    .gem[1] = { { 0xff0d0000, 58 }, 2, "rgmii-id", 1000, 0xd, 0x235 },
+    .gem[0] = { { 0xff0c0000, 56 }, 2, "rgmii-id", 1000, 0xc, VERSAL_GEM0_STREAM_ID },
+    .gem[1] = { { 0xff0d0000, 58 }, 2, "rgmii-id", 1000, 0xd, VERSAL_GEM1_STREAM_ID },
     .num_gem = 2,
 
     .zdma[0] = { "adma", { 0xffa80000, 60 }, 8, 0x10000, 1 },
@@ -2228,6 +2228,19 @@ static void versal_realize_common(Versal *s)
         versal_create_sdhci(s, &map->sdhci[i]);
     }
 
+    /*
+     * `versal_create_smmu` needs to be called before `versal_create_gem`
+     * because `versal_create_gem` calls `versal_connect_dev_iommu` which checks
+     * for the existence of the SMMU. If the SMMU exists, it connects the device
+     * to the SMMU's IOMMU memory region. Otherwise it connects to the physical
+     * memory region. Calling `versal_connect_dev_iommu` before creating the
+     * SMMU can cause problems with hypervisors because the translation of guest
+     * physical to host physical addresses is not done.
+     */
+    if (map->smmu.addr) {
+        versal_create_smmu(s, &map->smmu);
+    }
+
     for (i = 0; i < map->num_gem; i++) {
         versal_create_gem(s, &map->gem[i]);
         /*
@@ -2246,10 +2259,6 @@ static void versal_realize_common(Versal *s)
 
     for (i = 0; i < map->num_usb; i++) {
         versal_create_usb(s, &map->usb[i]);
-    }
-
-    if (map->smmu.addr) {
-        versal_create_smmu(s, &map->smmu);
     }
 
     if (map->lpd_iou_slcr) {
