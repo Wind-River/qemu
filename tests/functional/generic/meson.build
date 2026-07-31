@@ -6,6 +6,7 @@ tests_generic_system = [
   'linters',
   'version',
   'vnc',
+  'vxworks_usernet',
 ]
 
 tests_generic_linuxuser = [
