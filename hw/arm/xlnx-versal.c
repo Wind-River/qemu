@@ -465,8 +465,8 @@ static const VersalMap VERSAL2_MAP = {
     .canfd[3] = { 0xf1a10000, 96 },
     .num_canfd = 4,
 
-    .gem[0] = { { 0xf1a60000, 39 }, 2, "rgmii-id", 1000 },
-    .gem[1] = { { 0xf1a70000, 41 }, 2, "rgmii-id", 1000 },
+    .gem[0] = { { 0xf1a60000, 39 }, 2, "rgmii-id", 1000, 0xc },
+    .gem[1] = { { 0xf1a70000, 41 }, 2, "rgmii-id", 1000, 0xd },
     .gem[2] = { { 0xed920000, 164 }, 4, "usxgmii", 10000 }, /* MMI 10Gb GEM */
     .num_gem = 3,
 
