@@ -88,14 +88,15 @@ static void fsl_linflex_write(void *opaque, hwaddr offset,
             break;
         case LINFLEX_UARTSR:
             value = value & 0xFFFF; // upper 16 bits are reserved
-            // Detect if software cleared DRFRFE/RMB. If so, accept new char input
             mask = UARTSR_DRFRFE | UARTSR_RMB;
-            if ((s->regs[reg] & mask) && !(value & mask)) {
-                // accept new character input now that software has cleared DRFRFE/RMB
+            // Status bits are write-1-to-clear
+            if ((s->regs[reg] & mask) && !(s->regs[reg] & ~value & mask)) {
+                // software cleared DRFRFE/RMB, accept new character input
+                s->regs[reg] &= ~value;
                 qemu_chr_fe_accept_input(&s->chr);
+            } else {
+                s->regs[reg] &= ~value;
             }
-            // store new value of reg
-            s->regs[reg] &= ~value;
             break;
         case LINFLEX_LINTCSR:
             qemu_log_mask(LOG_UNIMP, "%s: Register LINTCSR not implemented\n", __func__);
